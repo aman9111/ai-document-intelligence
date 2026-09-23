@@ -1,0 +1,63 @@
+:root {
+  --lavender: #e9e3ff;
+  --lavender-strong: #c9bcff;
+  --pink: #ffe3ec;
+  --pink-strong: #ffc2d6;
+  --mint: #dcf5ec;
+  --peach: #ffeede;
+  --sky: #e0f0ff;
+
+  --text: #5b5670;
+  --text-h: #2d2640;
+  --muted: #8a849c;
+  --card: #ffffff;
+  --border: #ece8f5;
+  --accent: #7c6bd6;
+  --danger-bg: #ffe8ea;
+  --danger-text: #b4234a;
+
+  --shadow: 0 20px 50px -20px rgba(124, 107, 214, 0.35),
+    0 4px 12px rgba(45, 38, 64, 0.05);
+
+  --sans: 'Plus Jakarta Sans', system-ui, 'Segoe UI', Roboto, sans-serif;
+
+  font: 16px/1.5 var(--sans);
+  color: var(--text);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100svh;
+  background:
+    radial-gradient(circle at 10% 15%, var(--pink) 0, transparent 40%),
+    radial-gradient(circle at 90% 10%, var(--sky) 0, transparent 40%),
+    radial-gradient(circle at 85% 90%, var(--mint) 0, transparent 45%),
+    radial-gradient(circle at 15% 90%, var(--peach) 0, transparent 40%),
+    #faf8ff;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+h1,
+h2 {
+  color: var(--text-h);
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+p {
+  margin: 0;
+}
