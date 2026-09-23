@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Brand from './components/Brand'
+import Documents from './components/Documents'
 import LoginForm from './components/LoginForm'
 import RegisterForm from './components/RegisterForm'
 import './App.css'
-
-const API_BASE_URL = 'http://localhost:8000'
+import { API_BASE_URL } from './api'
 
 interface User {
   id: number
@@ -20,6 +20,14 @@ function App() {
   const [authView, setAuthView] = useState<'login' | 'register'>('login')
   const [notice, setNotice] = useState<string | null>(null)
 
+  // useCallback keeps the same function between renders,
+  // so child effects that depend on it don't re-run every render
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('token')
+    setToken(null)
+    setUser(null)
+  }, [])
+
   useEffect(() => {
     if (!token) return
 
@@ -32,13 +40,7 @@ function App() {
       })
       .then((data: User) => setUser(data))
       .catch(() => handleLogout())
-  }, [token])
-
-  function handleLogout() {
-    localStorage.removeItem('token')
-    setToken(null)
-    setUser(null)
-  }
+  }, [token, handleLogout])
 
   if (!token) {
     if (authView === 'register') {
@@ -70,32 +72,30 @@ function App() {
 
   return (
     <main className="card dashboard">
-      <Brand />
+      <header className="dash-header">
+        <Brand />
+        <div className="dash-user">
+          {user && (
+            <span className="avatar avatar-sm" title={user.name}>
+              {user.name.charAt(0).toUpperCase()}
+            </span>
+          )}
+          <button type="button" className="link-btn" onClick={handleLogout}>
+            Log out
+          </button>
+        </div>
+      </header>
 
       {user ? (
         <>
           <h1>Hi, {user.name} 🌸</h1>
-          <p className="subtitle">You're logged in.</p>
+          <p className="subtitle">Upload a document to get started.</p>
 
-          <div className="profile">
-            <span className="avatar">{user.name.charAt(0).toUpperCase()}</span>
-            <div>
-              <p className="profile-name">{user.name}</p>
-            </div>
-          </div>
-
-          <div className="empty-state">
-            <strong>No documents yet</strong>
-            Document upload is coming next.
-          </div>
+          <Documents token={token} onUnauthorized={handleLogout} />
         </>
       ) : (
         <p className="subtitle">Loading...</p>
       )}
-
-      <button type="button" className="btn btn-soft" onClick={handleLogout}>
-        Log out
-      </button>
     </main>
   )
 }

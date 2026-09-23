@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import Brand from './Brand'
-
-const API_BASE_URL = 'http://localhost:8000'
+import { API_BASE_URL } from '../api'
 
 interface LoginResponse {
   access_token: string

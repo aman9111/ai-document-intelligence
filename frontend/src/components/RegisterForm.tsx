@@ -1,20 +1,11 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import Brand from './Brand'
-
-const API_BASE_URL = 'http://localhost:8000'
+import { API_BASE_URL, getErrorMessage } from '../api'
 
 interface RegisterFormProps {
   onRegisterSuccess: () => void
   onSwitchToLogin: () => void
-}
-
-function getErrorMessage(detail: unknown): string {
-  // FastAPI sends a string for our own errors (409)
-  // and a list of field errors for validation failures (422)
-  if (typeof detail === 'string') return detail
-  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg
-  return 'Registration failed'
 }
 
 function RegisterForm({ onRegisterSuccess, onSwitchToLogin }: RegisterFormProps) {
@@ -45,7 +36,7 @@ function RegisterForm({ onRegisterSuccess, onSwitchToLogin }: RegisterFormProps)
 
       if (!response.ok) {
         const data = await response.json()
-        setError(getErrorMessage(data.detail))
+        setError(getErrorMessage(data.detail, 'Registration failed'))
         return
       }
 
