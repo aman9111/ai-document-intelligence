@@ -1,8 +1,10 @@
 import logging
 
+from chunking import chunk_page
 from database import SessionLocal
+from embeddings import embed_passages
 from extraction import extract_pages
-from models import Document, DocumentPage
+from models import Document, DocumentChunk, DocumentPage
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ def process_document(document_id: int, file_path) -> None:
 
         document.status = "processing"
         document.pages.clear()
+        document.chunks.clear()
         db.commit()
 
         try:
@@ -33,8 +36,26 @@ def process_document(document_id: int, file_path) -> None:
                     )
                 )
 
-            has_text = any(page.text for page in extracted)
-            document.status = "ready" if has_text else "failed"
+            # Split every page into chunks, then turn all chunks into
+            # embeddings in one go (much faster than one at a time)
+            chunks = [
+                chunk
+                for page in extracted
+                for chunk in chunk_page(page.text, page.page_number)
+            ]
+            vectors = embed_passages([chunk.text for chunk in chunks])
+
+            for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
+                document.chunks.append(
+                    DocumentChunk(
+                        chunk_index=index,
+                        page_number=chunk.page_number,
+                        text=chunk.text,
+                        embedding=vector,
+                    )
+                )
+
+            document.status = "ready" if chunks else "failed"
         except Exception:
             logger.exception("Text extraction failed for document %s", document_id)
             db.rollback()

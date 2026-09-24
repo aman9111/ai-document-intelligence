@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
+import DocumentSearch from './DocumentSearch'
 import DocumentText from './DocumentText'
 
 interface DocumentItem {
@@ -39,6 +40,7 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [viewingDocument, setViewingDocument] = useState<DocumentItem | null>(null)
+  const [searchingDocument, setSearchingDocument] = useState<DocumentItem | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const authHeader = { Authorization: `Bearer ${token}` }
@@ -265,9 +267,14 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
               </div>
               <div className="doc-actions">
                 {document.status === 'ready' && (
-                  <button type="button" className="btn-icon" onClick={() => setViewingDocument(document)}>
-                    View text
-                  </button>
+                  <>
+                    <button type="button" className="btn-icon" onClick={() => setSearchingDocument(document)}>
+                      Search
+                    </button>
+                    <button type="button" className="btn-icon" onClick={() => setViewingDocument(document)}>
+                      View text
+                    </button>
+                  </>
                 )}
                 {(document.status === 'uploaded' || document.status === 'failed') && (
                   <button type="button" className="btn-icon" onClick={() => handleProcess(document)}>
@@ -284,6 +291,19 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {searchingDocument && (
+        <DocumentSearch
+          documentId={searchingDocument.id}
+          filename={searchingDocument.original_filename}
+          token={token}
+          onClose={() => setSearchingDocument(null)}
+          onReprocess={() => {
+            handleProcess(searchingDocument)
+            setSearchingDocument(null)
+          }}
+        />
       )}
 
       {viewingDocument && (

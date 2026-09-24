@@ -6,9 +6,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user, get_db
-from models import Document, User
+from embeddings import embed_passages, embed_query, similarity
+from models import Document, DocumentChunk, User
 from processing import process_document
-from schemas import DocumentOut, DocumentPageOut
+from schemas import DocumentOut, DocumentPageOut, SearchRequest, SearchResult
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -135,6 +136,75 @@ def get_document_text(
 ):
     document = get_user_document(document_id, current_user, db)
     return document.pages
+
+
+@router.post("/{document_id}/search", response_model=list[SearchResult])
+def search_document(
+    document_id: int,
+    search: SearchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    document = get_user_document(document_id, current_user, db)
+
+    if document.status != "ready":
+        raise HTTPException(status_code=409, detail="Document is not ready for search yet")
+
+    # Documents processed before search existed have text but no chunks
+    has_chunks = db.query(DocumentChunk.id).filter(DocumentChunk.document_id == document.id).first()
+
+    if has_chunks is None:
+        raise HTTPException(
+            status_code=409,
+            detail="This document was processed before search was added. Re-process it to enable search.",
+        )
+
+    query_vector = embed_query(search.query)
+
+    # <=> is pgvector's cosine distance: 0 = same meaning, bigger = less similar
+    distance = DocumentChunk.embedding.cosine_distance(query_vector)
+
+    rows = (
+        db.query(DocumentChunk, distance.label("distance"))
+        .filter(DocumentChunk.document_id == document.id)
+        .order_by(distance)
+        .limit(search.top_k)
+        .all()
+    )
+
+    # A chunk has many lines. Find the one line in each chunk that best matches
+    # the question, so the UI can highlight it (e.g. "4 Electrolytes 800.00").
+    chunk_lines = [
+        [line for line in chunk.text.split("\n") if line.strip()] or [chunk.text]
+        for chunk, _ in rows
+    ]
+    line_vectors = iter(embed_passages([line for lines in chunk_lines for line in lines]))
+
+    results = []
+    seen_lines = set()
+
+    for (chunk, chunk_distance), lines in zip(rows, chunk_lines):
+        vectors = [next(line_vectors) for _ in lines]
+        scores = [similarity(query_vector, vector) for vector in vectors]
+        best_line = lines[scores.index(max(scores))]
+
+        # Chunks overlap, so two chunks can have the same best line.
+        # Rows are sorted best first, so keep only the first one.
+        if best_line in seen_lines:
+            continue
+        seen_lines.add(best_line)
+
+        results.append(
+            SearchResult(
+                chunk_index=chunk.chunk_index,
+                page_number=chunk.page_number,
+                text=chunk.text,
+                best_line=best_line,
+                score=round(1 - chunk_distance, 3),
+            )
+        )
+
+    return results
 
 
 @router.post("/{document_id}/process", response_model=DocumentOut)

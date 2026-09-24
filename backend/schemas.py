@@ -35,3 +35,16 @@ class DocumentPageOut(BaseModel):
     page_number: int
     text: str
     method: str
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class SearchResult(BaseModel):
+    chunk_index: int
+    page_number: int
+    text: str
+    best_line: str
+    score: float

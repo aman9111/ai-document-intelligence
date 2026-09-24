@@ -1,9 +1,11 @@
 from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
+from embeddings import EMBEDDING_DIMENSIONS
 
 
 class User(Base):
@@ -67,6 +69,11 @@ class Document(Base):
         cascade="all, delete-orphan",
         order_by="DocumentPage.page_number"
     )
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentChunk.chunk_index"
+    )
 
 
 class DocumentPage(Base):
@@ -84,3 +91,20 @@ class DocumentPage(Base):
     method: Mapped[str] = mapped_column(String(10), nullable=False)
 
     document: Mapped["Document"] = relationship(back_populates="pages")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False
+    )
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=False)
+
+    document: Mapped["Document"] = relationship(back_populates="chunks")
