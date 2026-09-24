@@ -1,13 +1,14 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user, get_db
 from models import Document, User
-from schemas import DocumentOut
+from processing import process_document
+from schemas import DocumentOut, DocumentPageOut
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -40,6 +41,7 @@ def get_user_document(document_id: int, user: User, db: Session) -> Document:
 @router.post("", response_model=DocumentOut, status_code=201)
 def upload_document(
     file: UploadFile,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -78,11 +80,16 @@ def upload_document(
         stored_filename=stored_filename,
         content_type=ALLOWED_TYPES[extension],
         size_bytes=size_bytes,
+        status="processing",
     )
 
     db.add(document)
     db.commit()
     db.refresh(document)
+
+    # Text extraction (especially OCR) is slow, so it runs after the response
+    # is sent. The UI polls GET /documents until the status changes.
+    background_tasks.add_task(process_document, document.id, file_path)
 
     return document
 
@@ -118,6 +125,42 @@ def download_document(
         filename=document.original_filename,
         content_disposition_type="inline",
     )
+
+
+@router.get("/{document_id}/text", response_model=list[DocumentPageOut])
+def get_document_text(
+    document_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    document = get_user_document(document_id, current_user, db)
+    return document.pages
+
+
+@router.post("/{document_id}/process", response_model=DocumentOut)
+def reprocess_document(
+    document_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    document = get_user_document(document_id, current_user, db)
+
+    if document.status == "processing":
+        raise HTTPException(status_code=409, detail="Document is already being processed")
+
+    file_path = UPLOAD_DIR / document.stored_filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File is missing on the server")
+
+    document.status = "processing"
+    db.commit()
+    db.refresh(document)
+
+    background_tasks.add_task(process_document, document.id, file_path)
+
+    return document
 
 
 @router.delete("/{document_id}", status_code=204)

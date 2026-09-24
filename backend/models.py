@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -62,3 +62,25 @@ class Document(Base):
     )
 
     owner: Mapped["User"] = relationship(back_populates="documents")
+    pages: Mapped[list["DocumentPage"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentPage.page_number"
+    )
+
+
+class DocumentPage(Base):
+    __tablename__ = "document_pages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False
+    )
+    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # "text" = read directly from the file, "ocr" = read from an image
+    method: Mapped[str] = mapped_column(String(10), nullable=False)
+
+    document: Mapped["Document"] = relationship(back_populates="pages")

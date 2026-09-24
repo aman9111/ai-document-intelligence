@@ -10,3 +10,7 @@ frontend/dist/
 .env
 .env.*
 backend/uploads/
+
+# local practice files (may contain personal data)
+backend/sample*
+backend/try_*.py

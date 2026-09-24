@@ -324,6 +324,21 @@
   font-size: 12px;
 }
 
+.status-processing {
+  background: #fff4d6;
+  color: #9a6b00;
+}
+
+.status-ready {
+  background: var(--mint);
+  color: #2f7a5c;
+}
+
+.status-failed {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
 .doc-actions {
   display: flex;
   gap: 6px;
@@ -389,4 +404,92 @@
   &:hover {
     text-decoration: underline;
   }
+}
+
+/* Extracted text modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: rgba(45, 38, 64, 0.35);
+  backdrop-filter: blur(3px);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  max-height: 85svh;
+  border-radius: 20px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+
+  h2 {
+    font-size: 18px;
+  }
+}
+
+.modal-body {
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.page-text {
+  margin-bottom: 20px;
+
+  pre {
+    margin: 0;
+    padding: 14px;
+    border-radius: 12px;
+    background: #fbfaff;
+    border: 1px solid var(--border);
+    color: var(--text-h);
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
+.page-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.method-pill {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.method-text {
+  background: var(--sky);
+  color: #2563a8;
+}
+
+.method-ocr {
+  background: var(--peach);
+  color: #a3591c;
 }

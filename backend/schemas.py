@@ -27,3 +27,11 @@ class DocumentOut(BaseModel):
     size_bytes: int
     status: str
     created_at: datetime
+
+
+class DocumentPageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    page_number: int
+    text: str
+    method: str

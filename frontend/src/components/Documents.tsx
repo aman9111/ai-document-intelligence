@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
+import DocumentText from './DocumentText'
 
 interface DocumentItem {
   id: number
@@ -17,6 +18,7 @@ interface DocumentsProps {
 }
 
 const ACCEPTED_FILES = '.pdf,.docx,.png,.jpg,.jpeg'
+const POLL_INTERVAL_MS = 3000
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -36,26 +38,44 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [viewingDocument, setViewingDocument] = useState<DocumentItem | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const authHeader = { Authorization: `Bearer ${token}` }
 
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/documents`, {
+  const loadDocuments = useCallback(() => {
+    return fetch(`${API_BASE_URL}/documents`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((response) => {
         if (response.status === 401) {
           onUnauthorized()
-          return []
+          return null
         }
-        if (!response.ok) throw new Error('Could not load documents')
+        if (!response.ok) throw new Error()
         return response.json()
       })
-      .then((data: DocumentItem[]) => setDocuments(data))
-      .catch((err: Error) => setError(err.message))
+      .then((data: DocumentItem[] | null) => {
+        if (data) setDocuments(data)
+      })
+      .catch(() => setError('Could not load documents'))
       .finally(() => setIsLoading(false))
   }, [token, onUnauthorized])
+
+  useEffect(() => {
+    loadDocuments()
+  }, [loadDocuments])
+
+  // While any document is still being processed, refresh the list every
+  // few seconds so its status changes from "processing" to "ready" by itself
+  const hasProcessing = documents.some((d) => d.status === 'processing')
+
+  useEffect(() => {
+    if (!hasProcessing) return
+
+    const intervalId = setInterval(loadDocuments, POLL_INTERVAL_MS)
+    return () => clearInterval(intervalId)
+  }, [hasProcessing, loadDocuments])
 
   async function uploadFile(file: File) {
     setError(null)
@@ -123,6 +143,32 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
     } catch {
       newTab?.close()
       setError('Could not open the file')
+    }
+  }
+
+  async function handleProcess(document: DocumentItem) {
+    setError(null)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents/${document.id}/process`, {
+        method: 'POST',
+        headers: authHeader,
+      })
+
+      if (response.status === 401) return onUnauthorized()
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(getErrorMessage(data.detail, 'Could not process the file'))
+        return
+      }
+
+      setDocuments((current) =>
+        current.map((d) => (d.id === document.id ? (data as DocumentItem) : d)),
+      )
+    } catch {
+      setError('Could not reach the server')
     }
   }
 
@@ -212,10 +258,22 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
                 <p className="doc-meta">
                   {formatSize(document.size_bytes)} ·{' '}
                   {new Date(document.created_at).toLocaleDateString()} ·{' '}
-                  <span className="status-pill">{document.status}</span>
+                  <span className={`status-pill status-${document.status}`}>
+                    {document.status}
+                  </span>
                 </p>
               </div>
               <div className="doc-actions">
+                {document.status === 'ready' && (
+                  <button type="button" className="btn-icon" onClick={() => setViewingDocument(document)}>
+                    View text
+                  </button>
+                )}
+                {(document.status === 'uploaded' || document.status === 'failed') && (
+                  <button type="button" className="btn-icon" onClick={() => handleProcess(document)}>
+                    {document.status === 'failed' ? 'Retry' : 'Extract text'}
+                  </button>
+                )}
                 <button type="button" className="btn-icon" onClick={() => handleOpen(document)}>
                   Open
                 </button>
@@ -226,6 +284,15 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {viewingDocument && (
+        <DocumentText
+          documentId={viewingDocument.id}
+          filename={viewingDocument.original_filename}
+          token={token}
+          onClose={() => setViewingDocument(null)}
+        />
       )}
     </section>
   )
