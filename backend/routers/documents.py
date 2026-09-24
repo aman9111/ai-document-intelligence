@@ -222,6 +222,37 @@ def retrieve(document: Document, query: str, db: Session) -> tuple[list[Answer],
     return answers, chunks
 
 
+def find_sources(document: Document, query: str, db: Session) -> list[Source]:
+    # RAG step 1 (Retrieval): take the chunks of the best answers, best first,
+    # until we have ASK_SOURCE_CHUNKS different chunks
+    answers, chunks = retrieve(document, query, db)
+
+    source_chunks = []
+    for answer in answers:
+        chunk = chunks[answer.chunk_id]
+        if chunk not in source_chunks:
+            source_chunks.append(chunk)
+        if len(source_chunks) == ASK_SOURCE_CHUNKS:
+            break
+
+    return [
+        Source(number=number, page_number=chunk.page_number, text=chunk.text)
+        for number, chunk in enumerate(source_chunks, start=1)
+    ]
+
+
+def rate_limit_message(error: RateLimitError) -> str:
+    # The 429 response also carries the limit headers, so the UI can show them
+    limits = save_usage(error.response.headers, None)
+    wait = error.response.headers.get("retry-after")
+
+    return (
+        "The free AI limit was reached. "
+        + (f"Please try again in {wait} seconds." if wait else "Please wait a minute and try again.")
+        + (" (No questions left today.)" if limits.requests_remaining == 0 else "")
+    )
+
+
 @router.post("/{document_id}/search", response_model=list[SearchResult])
 def search_document(
     document_id: int,
@@ -252,22 +283,7 @@ def ask_document(
     current_user: User = Depends(get_current_user),
 ):
     document = get_searchable_document(document_id, current_user, db)
-    answers, chunks = retrieve(document, ask.question, db)
-
-    # RAG step 1 (Retrieval): take the chunks of the best answers, best first,
-    # until we have ASK_SOURCE_CHUNKS different chunks
-    source_chunks = []
-    for answer in answers:
-        chunk = chunks[answer.chunk_id]
-        if chunk not in source_chunks:
-            source_chunks.append(chunk)
-        if len(source_chunks) == ASK_SOURCE_CHUNKS:
-            break
-
-    sources = [
-        Source(number=number, page_number=chunk.page_number, text=chunk.text)
-        for number, chunk in enumerate(source_chunks, start=1)
-    ]
+    sources = find_sources(document, ask.question, db)
 
     # RAG steps 2 + 3 (Augmented Generation): send the question together with
     # the excerpts to the LLM and let it write the answer
@@ -276,17 +292,7 @@ def ask_document(
     except LLMNotConfiguredError:
         raise HTTPException(status_code=503, detail="AI is not configured on the server")
     except RateLimitError as error:
-        # The 429 response also carries the limit headers, so the UI can show them
-        limits = save_usage(error.response.headers, None)
-        wait = error.response.headers.get("retry-after")
-        raise HTTPException(
-            status_code=429,
-            detail=(
-                "The free AI limit was reached. "
-                + (f"Please try again in {wait} seconds." if wait else "Please wait a minute and try again.")
-                + (" (No questions left today.)" if limits.requests_remaining == 0 else "")
-            ),
-        )
+        raise HTTPException(status_code=429, detail=rate_limit_message(error))
     except APIError:
         raise HTTPException(status_code=502, detail="The AI service failed. Please try again.")
 

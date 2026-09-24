@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
-import DocumentAsk from './DocumentAsk'
+import DocumentChat from './DocumentChat'
 import DocumentSearch from './DocumentSearch'
 import DocumentText from './DocumentText'
 
@@ -299,7 +299,7 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
       )}
 
       {askingDocument && (
-        <DocumentAsk
+        <DocumentChat
           documentId={askingDocument.id}
           filename={askingDocument.original_filename}
           token={token}

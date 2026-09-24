@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,7 +23,9 @@ Rules:
 - Copy numbers, amounts and dates exactly as written. Do not add currency symbols or units that are not in the text.
 - If the excerpts do not contain the answer, say: "I couldn't find this in the document."
 - After each fact, cite the excerpt number(s) it came from, like [1] or [2][3].
-- Be short and clear: 1-3 sentences, or a short list if there are several items."""
+- Be short and clear: 1-3 sentences, or a short list if there are several items.
+- Earlier messages of the conversation are given for context. Use them to understand
+  follow-up questions like "and for how long?", but take facts only from the excerpts."""
 
 
 @dataclass
@@ -96,23 +99,63 @@ def build_user_message(question: str, sources: list[Source]) -> str:
     return f"Question: {question}\n\nDocument excerpts:\n\n{excerpts}"
 
 
+# Settings shared by normal and streaming answers
+ANSWER_SETTINGS = {
+    # Low temperature = less "creative", sticks closer to the excerpts
+    "temperature": 0.2,
+    # gpt-oss thinks before answering; "medium" understood OCR typos like "Sdays"
+    "reasoning_effort": "medium",
+    "max_completion_tokens": 1000,
+}
+
+
+def build_messages(question: str, sources: list[Source], history: list[dict] | None = None) -> list[dict]:
+    # history = earlier {"role", "content"} messages of the conversation (without
+    # their excerpts, to save tokens). Only the new question gets excerpts.
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        *(history or []),
+        {"role": "user", "content": build_user_message(question, sources)},
+    ]
+
+
 def answer_question(question: str, sources: list[Source]) -> tuple[str, LLMUsage]:
     # with_raw_response gives us the HTTP headers too, which is where the
     # provider says how much of the free limit is left
     raw = get_client().chat.completions.with_raw_response.create(
         model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_user_message(question, sources)},
-        ],
-        # Low temperature = less "creative", sticks closer to the excerpts
-        temperature=0.2,
-        # gpt-oss thinks before answering; "medium" understood OCR typos like "Sdays"
-        reasoning_effort="medium",
-        max_completion_tokens=1000,
+        messages=build_messages(question, sources),
+        **ANSWER_SETTINGS,
     )
 
     response = raw.parse()
     usage = save_usage(raw.headers, response.usage.total_tokens if response.usage else None)
 
     return (response.choices[0].message.content or "").strip(), usage
+
+
+def stream_answer(
+    question: str,
+    sources: list[Source],
+    history: list[dict],
+) -> Iterator[tuple[str, str | LLMUsage]]:
+    # Yields ("token", "some text") for every small piece of the answer as the
+    # LLM writes it, and finally ("usage", LLMUsage) once it has finished
+    raw = get_client().chat.completions.with_raw_response.create(
+        model=LLM_MODEL,
+        messages=build_messages(question, sources, history),
+        stream=True,
+        # Ask the provider to send the token count in the last piece
+        stream_options={"include_usage": True},
+        **ANSWER_SETTINGS,
+    )
+
+    tokens_used = None
+
+    for chunk in raw.parse():
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield "token", chunk.choices[0].delta.content
+        if chunk.usage:
+            tokens_used = chunk.usage.total_tokens
+
+    yield "usage", save_usage(raw.headers, tokens_used)
