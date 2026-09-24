@@ -16,7 +16,7 @@ function HighlightedText({ text, highlight }: { text: string; highlight: string 
   return (
     <p className="search-text">
       {lines.map((line, index) => (
-        <span key={index} className={line === highlight ? 'best-line' : undefined}>
+        <span key={index} className={line.includes(highlight) ? 'best-line' : undefined}>
           {line}
           {index < lines.length - 1 && '\n'}
         </span>
@@ -62,7 +62,7 @@ function DocumentSearch({ documentId, filename, token, onClose, onReprocess }: D
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ query, top_k: 5 }),
+        body: JSON.stringify({ query, top_k: 1 }),
       })
 
       const data = await response.json()
@@ -128,10 +128,10 @@ function DocumentSearch({ documentId, filename, token, onClose, onReprocess }: D
             <p className="subtitle">No matching text found.</p>
           )}
 
-          {results?.map((result, index) => (
+          {results?.map((result) => (
             <section key={result.chunk_index} className="search-result">
               <p className="page-label">
-                #{index + 1} · Page {result.page_number}
+                Best answer · Page {result.page_number}
                 <span className="score-pill">
                   {Math.round(result.score * 100)}% match
                 </span>

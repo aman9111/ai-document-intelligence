@@ -3,12 +3,14 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user, get_db
-from embeddings import embed_passages, embed_query, similarity
+from embeddings import embed_query
 from models import Document, DocumentChunk, User
 from processing import process_document
+from search import rank_answers
 from schemas import DocumentOut, DocumentPageOut, SearchRequest, SearchResult
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -18,6 +20,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 CHUNK_SIZE = 1024 * 1024  # 1 MB
+CANDIDATE_CHUNKS = 10  # chunks fetched by meaning and by keywords before ranking answers
 
 ALLOWED_TYPES = {
     ".pdf": "application/pdf",
@@ -161,50 +164,61 @@ def search_document(
 
     query_vector = embed_query(search.query)
 
-    # <=> is pgvector's cosine distance: 0 = same meaning, bigger = less similar
-    distance = DocumentChunk.embedding.cosine_distance(query_vector)
+    # Step 1: find candidate chunks in two ways, so neither kind of match is missed
 
-    rows = (
-        db.query(DocumentChunk, distance.label("distance"))
+    # a) By meaning: pgvector cosine distance (<=>), closest first
+    distance = DocumentChunk.embedding.cosine_distance(query_vector)
+    meaning_ids = [
+        chunk_id
+        for (chunk_id,) in db.query(DocumentChunk.id)
         .filter(DocumentChunk.document_id == document.id)
         .order_by(distance)
-        .limit(search.top_k)
-        .all()
+        .limit(CANDIDATE_CHUNKS)
+    ]
+
+    # b) By exact words: PostgreSQL full-text search. plainto_tsquery turns
+    # "dengue test cost" into 'dengu' & 'test' & 'cost' (all words required);
+    # replacing & with | means "any of these words", ranked by ts_rank.
+    keyword_ids = [
+        row.id
+        for row in db.execute(
+            text(
+                """
+                SELECT id FROM document_chunks
+                WHERE document_id = :document_id
+                  AND to_tsvector('english', text) @@ replace(plainto_tsquery('english', :query)::text, '&', '|')::tsquery
+                ORDER BY ts_rank(to_tsvector('english', text), replace(plainto_tsquery('english', :query)::text, '&', '|')::tsquery) DESC
+                LIMIT :limit
+                """
+            ),
+            {"document_id": document.id, "query": search.query, "limit": CANDIDATE_CHUNKS},
+        )
+    ]
+
+    candidate_ids = list(dict.fromkeys(meaning_ids + keyword_ids))
+    chunks = {
+        chunk.id: chunk
+        for chunk in db.query(DocumentChunk).filter(DocumentChunk.id.in_(candidate_ids))
+    }
+
+    # Step 2: split candidate chunks into small answers (one line / sentence)
+    # and score each one by meaning + exact words (hybrid search)
+    answers = rank_answers(
+        search.query,
+        query_vector,
+        [(chunk_id, chunks[chunk_id].text) for chunk_id in candidate_ids],
     )
 
-    # A chunk has many lines. Find the one line in each chunk that best matches
-    # the question, so the UI can highlight it (e.g. "4 Electrolytes 800.00").
-    chunk_lines = [
-        [line for line in chunk.text.split("\n") if line.strip()] or [chunk.text]
-        for chunk, _ in rows
-    ]
-    line_vectors = iter(embed_passages([line for lines in chunk_lines for line in lines]))
-
-    results = []
-    seen_lines = set()
-
-    for (chunk, chunk_distance), lines in zip(rows, chunk_lines):
-        vectors = [next(line_vectors) for _ in lines]
-        scores = [similarity(query_vector, vector) for vector in vectors]
-        best_line = lines[scores.index(max(scores))]
-
-        # Chunks overlap, so two chunks can have the same best line.
-        # Rows are sorted best first, so keep only the first one.
-        if best_line in seen_lines:
-            continue
-        seen_lines.add(best_line)
-
-        results.append(
-            SearchResult(
-                chunk_index=chunk.chunk_index,
-                page_number=chunk.page_number,
-                text=chunk.text,
-                best_line=best_line,
-                score=round(1 - chunk_distance, 3),
-            )
+    return [
+        SearchResult(
+            chunk_index=chunks[answer.chunk_id].chunk_index,
+            page_number=chunks[answer.chunk_id].page_number,
+            text=chunks[answer.chunk_id].text,
+            best_line=answer.text,
+            score=round(answer.score, 3),
         )
-
-    return results
+        for answer in answers[: search.top_k]
+    ]
 
 
 @router.post("/{document_id}/process", response_model=DocumentOut)
