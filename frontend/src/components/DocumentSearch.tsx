@@ -88,12 +88,12 @@ function DocumentSearch({ documentId, filename, token, onClose, onReprocess }: D
         className="modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`Search in ${filename}`}
+        aria-label={`Find in ${filename}`}
         onClick={(e) => e.stopPropagation()}
       >
         <header className="modal-header">
           <div>
-            <h2>Search by meaning</h2>
+            <h2>Find in text</h2>
             <p className="doc-meta">{filename}</p>
           </div>
           <button type="button" className="btn-icon" onClick={onClose}>
@@ -112,9 +112,14 @@ function DocumentSearch({ documentId, filename, token, onClose, onReprocess }: D
               required
             />
             <button type="submit" className="btn btn-primary" disabled={isSearching}>
-              {isSearching ? 'Searching...' : 'Search'}
+              {isSearching ? 'Finding...' : 'Find'}
             </button>
           </form>
+
+          <p className="ai-note find-note">
+            Shows the line in the document that best matches your words. It doesn't compare or
+            calculate, so for questions like "what was the lowest...", use <strong>Ask AI</strong>.
+          </p>
 
           {error && <p className="login-error">{error}</p>}
 

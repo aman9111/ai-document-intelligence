@@ -568,3 +568,88 @@
   font-size: 11px;
   font-weight: 600;
 }
+
+/* Ask AI modal */
+.btn-icon-ai {
+  background: linear-gradient(135deg, var(--lavender-strong), var(--pink-strong));
+  color: var(--text-h);
+}
+
+.ai-answer {
+  padding: 16px 18px;
+  border-radius: 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--lavender);
+  color: var(--text-h);
+  font-size: 15px;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.ai-note {
+  margin: 8px 0 18px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.cite-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin: 0 2px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: text-top;
+}
+
+.find-note {
+  margin: -8px 0 16px;
+}
+
+/* Free AI quota */
+.usage-bar {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f6fcf9;
+  border: 1px solid var(--mint);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.usage-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+
+  strong {
+    color: var(--text-h);
+  }
+}
+
+.usage-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--mint);
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #5cc49a;
+  transition: width 0.3s;
+}
+
+.usage-low {
+  background: #e5484d;
+}

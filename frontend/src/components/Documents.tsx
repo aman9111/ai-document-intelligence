@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
+import DocumentAsk from './DocumentAsk'
 import DocumentSearch from './DocumentSearch'
 import DocumentText from './DocumentText'
 
@@ -41,6 +42,7 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
   const [error, setError] = useState<string | null>(null)
   const [viewingDocument, setViewingDocument] = useState<DocumentItem | null>(null)
   const [searchingDocument, setSearchingDocument] = useState<DocumentItem | null>(null)
+  const [askingDocument, setAskingDocument] = useState<DocumentItem | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const authHeader = { Authorization: `Bearer ${token}` }
@@ -268,8 +270,11 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
               <div className="doc-actions">
                 {document.status === 'ready' && (
                   <>
+                    <button type="button" className="btn-icon btn-icon-ai" onClick={() => setAskingDocument(document)}>
+                      Ask AI
+                    </button>
                     <button type="button" className="btn-icon" onClick={() => setSearchingDocument(document)}>
-                      Search
+                      Find in text
                     </button>
                     <button type="button" className="btn-icon" onClick={() => setViewingDocument(document)}>
                       View text
@@ -291,6 +296,15 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
             </li>
           ))}
         </ul>
+      )}
+
+      {askingDocument && (
+        <DocumentAsk
+          documentId={askingDocument.id}
+          filename={askingDocument.original_filename}
+          token={token}
+          onClose={() => setAskingDocument(null)}
+        />
       )}
 
       {searchingDocument && (

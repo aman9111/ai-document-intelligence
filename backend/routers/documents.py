@@ -3,15 +3,26 @@ from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from openai import APIError, RateLimitError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user, get_db
 from embeddings import embed_query
+from llm import LLMNotConfiguredError, Source, answer_question, save_usage
 from models import Document, DocumentChunk, User
 from processing import process_document
-from search import rank_answers
-from schemas import DocumentOut, DocumentPageOut, SearchRequest, SearchResult
+from search import Answer, rank_answers
+from schemas import (
+    AskRequest,
+    AskResponse,
+    AskSource,
+    AIUsage,
+    DocumentOut,
+    DocumentPageOut,
+    SearchRequest,
+    SearchResult,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -21,6 +32,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 CHUNK_SIZE = 1024 * 1024  # 1 MB
 CANDIDATE_CHUNKS = 10  # chunks fetched by meaning and by keywords before ranking answers
+ASK_SOURCE_CHUNKS = 5  # chunks sent to the LLM as context
 
 ALLOWED_TYPES = {
     ".pdf": "application/pdf",
@@ -141,14 +153,8 @@ def get_document_text(
     return document.pages
 
 
-@router.post("/{document_id}/search", response_model=list[SearchResult])
-def search_document(
-    document_id: int,
-    search: SearchRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    document = get_user_document(document_id, current_user, db)
+def get_searchable_document(document_id: int, user: User, db: Session) -> Document:
+    document = get_user_document(document_id, user, db)
 
     if document.status != "ready":
         raise HTTPException(status_code=409, detail="Document is not ready for search yet")
@@ -162,7 +168,11 @@ def search_document(
             detail="This document was processed before search was added. Re-process it to enable search.",
         )
 
-    query_vector = embed_query(search.query)
+    return document
+
+
+def retrieve(document: Document, query: str, db: Session) -> tuple[list[Answer], dict[int, DocumentChunk]]:
+    query_vector = embed_query(query)
 
     # Step 1: find candidate chunks in two ways, so neither kind of match is missed
 
@@ -191,7 +201,7 @@ def search_document(
                 LIMIT :limit
                 """
             ),
-            {"document_id": document.id, "query": search.query, "limit": CANDIDATE_CHUNKS},
+            {"document_id": document.id, "query": query, "limit": CANDIDATE_CHUNKS},
         )
     ]
 
@@ -204,10 +214,23 @@ def search_document(
     # Step 2: split candidate chunks into small answers (one line / sentence)
     # and score each one by meaning + exact words (hybrid search)
     answers = rank_answers(
-        search.query,
+        query,
         query_vector,
         [(chunk_id, chunks[chunk_id].text) for chunk_id in candidate_ids],
     )
+
+    return answers, chunks
+
+
+@router.post("/{document_id}/search", response_model=list[SearchResult])
+def search_document(
+    document_id: int,
+    search: SearchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    document = get_searchable_document(document_id, current_user, db)
+    answers, chunks = retrieve(document, search.query, db)
 
     return [
         SearchResult(
@@ -219,6 +242,62 @@ def search_document(
         )
         for answer in answers[: search.top_k]
     ]
+
+
+@router.post("/{document_id}/ask", response_model=AskResponse)
+def ask_document(
+    document_id: int,
+    ask: AskRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    document = get_searchable_document(document_id, current_user, db)
+    answers, chunks = retrieve(document, ask.question, db)
+
+    # RAG step 1 (Retrieval): take the chunks of the best answers, best first,
+    # until we have ASK_SOURCE_CHUNKS different chunks
+    source_chunks = []
+    for answer in answers:
+        chunk = chunks[answer.chunk_id]
+        if chunk not in source_chunks:
+            source_chunks.append(chunk)
+        if len(source_chunks) == ASK_SOURCE_CHUNKS:
+            break
+
+    sources = [
+        Source(number=number, page_number=chunk.page_number, text=chunk.text)
+        for number, chunk in enumerate(source_chunks, start=1)
+    ]
+
+    # RAG steps 2 + 3 (Augmented Generation): send the question together with
+    # the excerpts to the LLM and let it write the answer
+    try:
+        answer, usage = answer_question(ask.question, sources)
+    except LLMNotConfiguredError:
+        raise HTTPException(status_code=503, detail="AI is not configured on the server")
+    except RateLimitError as error:
+        # The 429 response also carries the limit headers, so the UI can show them
+        limits = save_usage(error.response.headers, None)
+        wait = error.response.headers.get("retry-after")
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "The free AI limit was reached. "
+                + (f"Please try again in {wait} seconds." if wait else "Please wait a minute and try again.")
+                + (" (No questions left today.)" if limits.requests_remaining == 0 else "")
+            ),
+        )
+    except APIError:
+        raise HTTPException(status_code=502, detail="The AI service failed. Please try again.")
+
+    return AskResponse(
+        answer=answer,
+        sources=[
+            AskSource(number=source.number, page_number=source.page_number, text=source.text)
+            for source in sources
+        ],
+        usage=AIUsage.model_validate(usage),
+    )
 
 
 @router.post("/{document_id}/process", response_model=DocumentOut)

@@ -48,3 +48,31 @@ class SearchResult(BaseModel):
     text: str
     best_line: str
     score: float
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=500)
+
+
+class AskSource(BaseModel):
+    number: int
+    page_number: int
+    text: str
+
+
+class AIUsage(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    tokens_used: int | None
+    requests_limit: int | None
+    requests_remaining: int | None
+    requests_reset: str | None
+    tokens_limit: int | None
+    tokens_remaining: int | None
+    tokens_reset: str | None
+
+
+class AskResponse(BaseModel):
+    answer: str
+    sources: list[AskSource]
+    usage: AIUsage

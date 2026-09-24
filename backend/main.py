@@ -6,7 +6,7 @@ from auth_schemas import LoginRequest
 from database import Base, engine
 from dependencies import get_current_user, get_db
 from models import User
-from routers import documents
+from routers import ai, documents
 from schemas import UserCreate, UserOut
 from security import create_access_token, hash_password, verify_password
 
@@ -23,6 +23,7 @@ app.add_middleware(
 )
 
 app.include_router(documents.router)
+app.include_router(ai.router)
 
 
 @app.get("/")
