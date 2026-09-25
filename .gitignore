@@ -9,6 +9,7 @@ frontend/dist/
 
 .env
 .env.*
+!.env.example
 backend/uploads/
 
 # local practice files (may contain personal data)

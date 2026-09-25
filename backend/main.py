@@ -1,22 +1,33 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from auth_schemas import LoginRequest
-from database import Base, engine
+from database import init_database
 from dependencies import get_current_user, get_db
 from models import User
 from routers import ai, chat, documents
 from schemas import UserCreate, UserOut
 from security import create_access_token, hash_password, verify_password
 
-Base.metadata.create_all(bind=engine)
+init_database()
 
 app = FastAPI()
 
+# Websites allowed to call this API from the browser, comma separated.
+# Not needed when the frontend and API are served from the same address (Docker setup).
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,6 +41,13 @@ app.include_router(chat.router)
 @app.get("/")
 def root():
     return {"message": "AI Document Intelligence API is running"}
+
+
+@app.get("/health")
+def health(db: Session = Depends(get_db)):
+    # Used by Docker and hosting platforms to check the app is alive
+    db.execute(text("SELECT 1"))
+    return {"status": "ok"}
 
 
 @app.post("/users", response_model=UserOut)

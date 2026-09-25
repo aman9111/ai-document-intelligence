@@ -1,7 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 load_dotenv()
@@ -20,3 +20,14 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
+
+
+def init_database() -> None:
+    # pgvector must be enabled before tables with vector columns are created.
+    # IF NOT EXISTS makes this safe to run on every start.
+    with engine.begin() as connection:
+        connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+
+    import models  # noqa: F401  (registers all tables on Base)
+
+    Base.metadata.create_all(bind=engine)

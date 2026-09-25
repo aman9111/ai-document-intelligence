@@ -1,3 +1,4 @@
+import os
 import uuid
 from pathlib import Path
 
@@ -26,8 +27,9 @@ from schemas import (
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Where uploaded files are saved. In Docker this is a volume, so files survive restarts.
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", Path(__file__).resolve().parent.parent / "uploads"))
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 CHUNK_SIZE = 1024 * 1024  # 1 MB
