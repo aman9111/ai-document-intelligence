@@ -128,7 +128,81 @@
 
 /* Dashboard */
 .dashboard {
-  max-width: 640px;
+  max-width: 760px;
+}
+
+/* On screens tall enough, the dashboard fits the window exactly and only the
+   documents list scrolls. On very short screens the whole page scrolls instead,
+   so the list never gets squeezed to nothing. */
+@media (min-height: 640px) {
+  .dashboard {
+    display: flex;
+    flex-direction: column;
+    height: calc(100svh - 48px); /* 48px = #root padding top + bottom */
+    padding-top: 28px;
+    padding-bottom: 28px;
+  }
+
+  .dashboard > .documents {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0; /* lets this flex child shrink, so its list can scroll */
+  }
+
+  /* Compact one-line upload box, so the list gets more room */
+  .dashboard .dropzone {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "icon title button"
+      "icon hint  button";
+    align-items: center;
+    column-gap: 14px;
+    row-gap: 2px;
+    padding: 16px 18px;
+    text-align: left;
+
+    .dropzone-icon {
+      grid-area: icon;
+      margin: 0;
+    }
+
+    .dropzone-title {
+      grid-area: title;
+    }
+
+    .dropzone-hint {
+      grid-area: hint;
+    }
+
+    .btn {
+      grid-area: button;
+      margin: 0;
+    }
+
+    /* Phones: button goes on its own row below the text */
+    @media (max-width: 560px) {
+      grid-template-columns: auto 1fr;
+      grid-template-areas:
+        "icon title"
+        "icon hint"
+        "button button";
+
+      .btn {
+        margin-top: 10px;
+      }
+    }
+  }
+
+  .documents > .doc-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--lavender-strong) transparent;
+  }
 }
 
 .dash-header {
@@ -266,7 +340,7 @@
   border-radius: 14px;
   background: #fcfbff;
 
-  @media (max-width: 480px) {
+  @media (max-width: 560px) {
     flex-wrap: wrap;
   }
 }
@@ -344,9 +418,17 @@
   gap: 6px;
   flex-shrink: 0;
 
-  @media (max-width: 480px) {
+  .btn-icon {
+    white-space: nowrap;
+  }
+
+  @media (max-width: 560px) {
     width: 100%;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+
+    .btn-icon {
+      flex: 1 1 auto;
+    }
   }
 }
 
