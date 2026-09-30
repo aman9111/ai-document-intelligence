@@ -59,6 +59,11 @@ docker compose down               # stop (data is kept)
 docker compose down -v            # stop and DELETE all data and uploads
 ```
 
+## Deploy to a server
+
+See [`deploy/DEPLOY.md`](deploy/DEPLOY.md): a free Oracle Cloud server, a free DuckDNS domain
+and automatic HTTPS with Caddy, using the same Docker setup.
+
 ## Run without Docker (development)
 
 Needs Python 3.10+, Node 20+, PostgreSQL with [pgvector](https://github.com/pgvector/pgvector),
@@ -87,6 +92,8 @@ npm run dev                       # http://localhost:5173
 | `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` | backend | LLM provider. Free key: https://console.groq.com |
 | `CORS_ORIGINS` | backend | Comma separated frontend addresses allowed to call the API (default `http://localhost:5173`) |
 | `UPLOAD_DIR` | backend | Folder for uploaded files (default `backend/uploads`) |
+| `ALLOW_REGISTRATION` | backend | `false` stops new sign-ups (use on a public server) |
+| `DOMAIN` | docker-compose.prod.yml | Domain for HTTPS with Caddy |
 | `VITE_API_URL` | frontend (build time) | Backend address (default `http://localhost:8000`, `/api` in Docker) |
 
 ## Test documents

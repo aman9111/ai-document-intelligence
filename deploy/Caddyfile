@@ -1,0 +1,9 @@
+# Caddy sits in front of the app on the server and handles HTTPS.
+# With DOMAIN set (e.g. mydocs.duckdns.org) it gets a free Let's Encrypt
+# certificate by itself and renews it automatically.
+{$DOMAIN} {
+	encode gzip
+
+	# Streaming chat (Server-Sent Events) is passed through as it arrives
+	reverse_proxy frontend:80
+}

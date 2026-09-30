@@ -15,3 +15,6 @@ backend/uploads/
 # local practice files (may contain personal data)
 backend/sample*
 backend/try_*.py
+
+# database backups made on the server
+backups/

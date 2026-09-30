@@ -50,8 +50,16 @@ def health(db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
+# Set ALLOW_REGISTRATION=false on a public server once your own accounts exist,
+# so strangers can't sign up (and use up the shared free AI quota)
+ALLOW_REGISTRATION = os.getenv("ALLOW_REGISTRATION", "true").lower() != "false"
+
+
 @app.post("/users", response_model=UserOut)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    if not ALLOW_REGISTRATION:
+        raise HTTPException(status_code=403, detail="Registration is closed")
+
     existing_user = db.query(User).filter(User.email == user.email).first()
 
     if existing_user:
