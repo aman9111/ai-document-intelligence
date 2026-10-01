@@ -1,0 +1,13 @@
+{
+  "review_threshold": 0.6,
+  "text": 0.9786666666666667,
+  "image": 0.9973333333333333,
+  "combined": 0.992,
+  "combined_not_flagged": 1.0,
+  "flagged_for_review": 0.02666666666666667,
+  "failed_caught": 0.9,
+  "good_marked_failed": 0.0006485084306095979,
+  "bundle_accuracy": 1.0,
+  "context_fixed": 0,
+  "context_broke": 0
+}
