@@ -20,6 +20,18 @@ HEAD_FILE = MODEL_DIR / "image_head.joblib"
 PAGE_IMAGE_SIZE = (600, 600)
 
 
+def release_free_memory():
+    # After the model is deleted, glibc's allocator keeps the freed memory for later
+    # instead of giving it back (measured: ~320 MB stayed). malloc_trim returns it to
+    # the operating system. Only exists on Linux with glibc, so ignore it elsewhere.
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except (OSError, AttributeError):
+        pass
+
+
 class ImageEmbedder:
     """Use as `with ImageEmbedder() as embedder:` to load SigLIP once for many pages."""
 
@@ -31,7 +43,9 @@ class ImageEmbedder:
 
     def __exit__(self, *exc):
         del self.model
-        gc.collect()  # give the ~800 MB back
+        gc.collect()
+        release_free_memory()
+
 
     def embed(self, images: list[Image.Image]) -> np.ndarray:
         prepared = []
