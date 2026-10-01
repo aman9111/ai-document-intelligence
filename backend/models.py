@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -60,6 +60,20 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False
+    )
+
+    # Document classification: "bill", "lab_report", ... or "others".
+    # Empty until the document has been classified.
+    doc_type: Mapped[str | None] = mapped_column(String(30), index=True, nullable=True)
+    doc_type_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Score for every type from each model, e.g. {"text": {...}, "image": {...}}
+    doc_type_scores: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # True when the user changed the type by hand (kept as training data)
+    doc_type_corrected: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default="false",
         nullable=False
     )
 
