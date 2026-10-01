@@ -1,6 +1,7 @@
 import logging
 
 from chunking import chunk_page
+from classification.image_model import release_free_memory
 from classification.pages import classify_document
 from database import SessionLocal
 from embeddings import embed_passages
@@ -76,3 +77,6 @@ def process_document(document_id: int, file_path) -> None:
         db.commit()
     finally:
         db.close()
+        # OCR images and model work leave freed memory that glibc keeps; return it
+        # so the small server goes back to its resting size between uploads
+        release_free_memory()
