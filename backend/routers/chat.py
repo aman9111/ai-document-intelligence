@@ -109,7 +109,17 @@ def chat(
     conversation_id = conversation.id
 
     def event_stream():
-        yield sse("start", {"conversation_id": conversation_id})
+        # Which page each excerpt number is from, so the UI can turn a citation
+        # like [2] into "Page 7 · Hospital bill" and highlight that page
+        yield sse(
+            "start",
+            {
+                "conversation_id": conversation_id,
+                "sources": [
+                    {"number": s.number, "page_number": s.page_number, "label": s.label} for s in sources
+                ],
+            },
+        )
 
         parts = []
         usage = None

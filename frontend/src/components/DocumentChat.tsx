@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
+import { IconSend, IconSparkle, IconTrash } from './Icons'
 
 interface AIUsage {
   tokens_used: number | null
@@ -16,10 +17,18 @@ interface Conversation {
   updated_at: string
 }
 
+// Which page an excerpt number in the answer ([1], [2]...) came from
+interface SourceRef {
+  number: number
+  page_number: number
+  label: string
+}
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   // Only set on messages from this session, not on ones loaded from history
+  sources?: SourceRef[]
   tokensUsed?: number | null
   isStreaming?: boolean
   error?: string
@@ -29,23 +38,43 @@ interface DocumentChatProps {
   documentId: number
   filename: string
   token: string
-  onClose: () => void
+  suggestions: string[]
+  // Called when an answer is finished, with the pages it cited
+  onAnswer: (pages: number[]) => void
+  onFocusPage: (pageNumber: number) => void
 }
+
+const CITATION = /[[【](\d+)[\]】]/g
 
 function formatNumber(value: number | null): string {
   return value === null ? '—' : value.toLocaleString()
 }
 
+function citedNumbers(answer: string): number[] {
+  return [...new Set([...answer.matchAll(CITATION)].map((match) => Number(match[1])))]
+}
+
 // The LLM writes citations as [1] or 【1】 and bold text as **text**.
-// Turn those into small source chips and <strong> tags.
-function renderAnswer(answer: string): ReactNode {
+// Turn those into small clickable source chips and <strong> tags.
+function renderAnswer(answer: string, sources: SourceRef[], onFocusPage: (page: number) => void): ReactNode {
   const parts = answer.split(/(\*\*[^*]+\*\*|[[【]\d+[\]】])/g)
 
   return parts.map((part, index) => {
     const citation = part.match(/^[[【](\d+)[\]】]$/)
 
     if (citation) {
-      return (
+      const source = sources.find((s) => s.number === Number(citation[1]))
+      return source ? (
+        <button
+          key={index}
+          type="button"
+          className="cite-chip"
+          title={`Page ${source.page_number}`}
+          onClick={() => onFocusPage(source.page_number)}
+        >
+          {citation[1]}
+        </button>
+      ) : (
         <span key={index} className="cite-chip">
           {citation[1]}
         </span>
@@ -58,38 +87,6 @@ function renderAnswer(answer: string): ReactNode {
 
     return <Fragment key={index}>{part}</Fragment>
   })
-}
-
-function UsageBar({ usage }: { usage: AIUsage | null }) {
-  if (!usage) {
-    return <p className="usage-bar">Free AI quota: shown after your first question</p>
-  }
-
-  const percentLeft =
-    usage.requests_limit && usage.requests_remaining !== null
-      ? (usage.requests_remaining / usage.requests_limit) * 100
-      : 100
-
-  return (
-    <div className="usage-bar">
-      <div className="usage-row">
-        <span>
-          <strong>{formatNumber(usage.requests_remaining)}</strong> /{' '}
-          {formatNumber(usage.requests_limit)} questions left today
-        </span>
-        <span>
-          <strong>{formatNumber(usage.tokens_remaining)}</strong> /{' '}
-          {formatNumber(usage.tokens_limit)} tokens left this minute
-        </span>
-      </div>
-      <div className="usage-track">
-        <div
-          className={`usage-fill${percentLeft < 20 ? ' usage-low' : ''}`}
-          style={{ width: `${percentLeft}%` }}
-        />
-      </div>
-    </div>
-  )
 }
 
 // Reads a Server-Sent Events stream ("event: x\ndata: {...}\n\n") and calls
@@ -124,7 +121,7 @@ async function readEventStream(
   }
 }
 
-function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProps) {
+function DocumentChat({ documentId, filename, token, suggestions, onAnswer, onFocusPage }: DocumentChatProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -132,7 +129,7 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [usage, setUsage] = useState<AIUsage | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
 
   const authHeader = { Authorization: `Bearer ${token}` }
 
@@ -154,18 +151,11 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
       .catch(() => setUsage(null))
   }, [loadConversations, token])
 
+  // Keep the newest message in view while the answer streams in. Scrolls only
+  // the messages box, not the whole page.
   useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
-
-  // Keep the newest message in view while the answer streams in
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ block: 'end' })
+    const box = messagesRef.current
+    if (box) box.scrollTop = box.scrollHeight
   }, [messages])
 
   function updateLastMessage(change: (message: ChatMessage) => ChatMessage) {
@@ -176,6 +166,7 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
     setError(null)
     setConversationId(id)
     setMessages([])
+    onAnswer([])
 
     if (id === null) return
 
@@ -201,10 +192,7 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
     loadConversations()
   }
 
-  async function handleSend(event: FormEvent) {
-    event.preventDefault()
-
-    const text = question.trim()
+  async function ask(text: string) {
     if (!text || isStreaming) return
 
     setError(null)
@@ -215,6 +203,10 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
       { role: 'user', content: text },
       { role: 'assistant', content: '', isStreaming: true },
     ])
+
+    // Kept here too (not only in state) to find the cited pages at the end
+    let answer = ''
+    let sources: SourceRef[] = []
 
     try {
       const response = await fetch(`${API_BASE_URL}/documents/${documentId}/chat`, {
@@ -237,7 +229,10 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
       await readEventStream(response, (eventName, data) => {
         if (eventName === 'start') {
           setConversationId(data.conversation_id as number)
+          sources = (data.sources as SourceRef[] | undefined) ?? []
+          updateLastMessage((message) => ({ ...message, sources }))
         } else if (eventName === 'token') {
+          answer += data.text as string
           updateLastMessage((message) => ({
             ...message,
             content: message.content + (data.text as string),
@@ -256,6 +251,11 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
             isStreaming: false,
             tokensUsed: doneUsage?.tokens_used ?? null,
           }))
+
+          const pages = citedNumbers(answer)
+            .map((n) => sources.find((s) => s.number === n)?.page_number)
+            .filter((page): page is number => page !== undefined)
+          onAnswer([...new Set(pages)])
         }
       })
 
@@ -271,109 +271,152 @@ function DocumentChat({ documentId, filename, token, onClose }: DocumentChatProp
     }
   }
 
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal modal-chat"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Chat about ${filename}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="modal-header">
-          <div>
-            <h2>Ask AI ✨</h2>
-            <p className="doc-meta">{filename}</p>
-          </div>
-          <button type="button" className="btn-icon" onClick={onClose}>
-            Close
-          </button>
-        </header>
+  function handleSend(event: FormEvent) {
+    event.preventDefault()
+    ask(question.trim())
+  }
 
-        <div className="chat-toolbar">
-          <select
-            value={conversationId ?? ''}
-            onChange={(e) => openConversation(e.target.value ? Number(e.target.value) : null)}
-            disabled={isStreaming}
-            aria-label="Previous chats"
-          >
-            <option value="">New chat</option>
-            {conversations.map((conversation) => (
-              <option key={conversation.id} value={conversation.id}>
-                {conversation.title}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn-icon"
-            onClick={() => openConversation(null)}
-            disabled={isStreaming || conversationId === null}
-          >
-            + New
-          </button>
-          {conversationId !== null && (
+  // Suggested questions the user hasn't asked yet in this chat
+  const unasked = suggestions.filter((s) => !messages.some((m) => m.role === 'user' && m.content === s))
+
+  const percentLeft =
+    usage?.requests_limit && usage.requests_remaining !== null
+      ? (usage.requests_remaining / usage.requests_limit) * 100
+      : null
+
+  return (
+    <aside className="chat-panel" aria-label="Ask AI">
+      <div className="chat-head">
+        <span className="chat-head-icon">
+          <IconSparkle size={16} />
+        </span>
+        <strong>Ask AI</strong>
+        {usage && (
+          <span className={`chat-quota${percentLeft !== null && percentLeft < 20 ? ' chat-quota-low' : ''}`}>
+            {formatNumber(usage.requests_remaining)} / {formatNumber(usage.requests_limit)} questions left today
+          </span>
+        )}
+      </div>
+
+      <div className="chat-toolbar">
+        <select
+          value={conversationId ?? ''}
+          onChange={(e) => openConversation(e.target.value ? Number(e.target.value) : null)}
+          disabled={isStreaming}
+          aria-label="Previous chats"
+        >
+          <option value="">New chat</option>
+          {conversations.map((conversation) => (
+            <option key={conversation.id} value={conversation.id}>
+              {conversation.title}
+            </option>
+          ))}
+        </select>
+        {conversationId !== null && (
+          <>
             <button
               type="button"
-              className="btn-icon btn-icon-danger"
+              className="btn-outline btn-sm"
+              onClick={() => openConversation(null)}
+              disabled={isStreaming}
+            >
+              + New
+            </button>
+            <button
+              type="button"
+              className="btn-outline btn-square btn-sm"
+              aria-label="Delete this chat"
               onClick={deleteConversation}
               disabled={isStreaming}
             >
-              Delete
+              <IconTrash size={16} />
             </button>
-          )}
-        </div>
+          </>
+        )}
+      </div>
 
-        <div className="chat-messages">
-          <UsageBar usage={usage} />
+      <div className="chat-messages" ref={messagesRef}>
+        {messages.length === 0 && (
+          <div className="chat-empty">
+            <strong>Ask anything about this document</strong>
+            Answers show which page they came from. Click a page number to jump to it.
+          </div>
+        )}
 
-          {messages.length === 0 && (
-            <div className="chat-empty">
-              <strong>Ask anything about this document</strong>
-              You can ask follow-up questions too, like "and for how many days?"
-            </div>
-          )}
+        {messages.map((message, index) => {
+          const cited = message.sources
+            ? citedNumbers(message.content)
+                .map((n) => message.sources!.find((s) => s.number === n))
+                .filter((s): s is SourceRef => s !== undefined)
+            : []
 
-          {messages.map((message, index) => (
+          return (
             <div key={index} className={`chat-message chat-${message.role}`}>
               {message.role === 'user' ? (
                 <div className="chat-bubble">{message.content}</div>
               ) : (
                 <div className="chat-bubble">
-                  {message.content && renderAnswer(message.content)}
+                  {message.content && renderAnswer(message.content, message.sources ?? [], onFocusPage)}
                   {message.isStreaming && <span className="typing-cursor" aria-hidden="true" />}
                   {message.isStreaming && !message.content && (
                     <span className="chat-thinking">Reading the document...</span>
                   )}
                   {message.error && <p className="login-error">{message.error}</p>}
+                  {!message.isStreaming && cited.length > 0 && (
+                    <span className="source-chips">
+                      {cited.map((source) => (
+                        <button
+                          key={source.number}
+                          type="button"
+                          className="source-chip"
+                          onClick={() => onFocusPage(source.page_number)}
+                        >
+                          [{source.number}] Page {source.page_number}
+                          {source.label && ` · ${source.label}`}
+                        </button>
+                      ))}
+                    </span>
+                  )}
                   {message.tokensUsed != null && (
-                    <p className="chat-meta">{formatNumber(message.tokensUsed)} tokens</p>
+                    <span className="chat-meta">{formatNumber(message.tokensUsed)} tokens</span>
                   )}
                 </div>
               )}
             </div>
-          ))}
+          )
+        })}
 
-          {error && <p className="login-error">{error}</p>}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <form onSubmit={handleSend} className="chat-input">
-          <input
-            type="text"
-            placeholder={conversationId ? 'Ask a follow-up...' : 'e.g. Which medicines should the patient take?'}
-            value={question}
-            onChange={(e) => setQuestion(e.target.value)}
-            maxLength={500}
-            autoFocus
-          />
-          <button type="submit" className="btn btn-primary" disabled={isStreaming || !question.trim()}>
-            {isStreaming ? '...' : 'Send'}
-          </button>
-        </form>
-        <p className="chat-disclaimer">AI answers can be wrong. Check important details in the document.</p>
+        {error && <p className="login-error">{error}</p>}
       </div>
-    </div>
+
+      {!isStreaming && unasked.length > 0 && (
+        <div className="suggestions">
+          {unasked.map((suggestion) => (
+            <button key={suggestion} type="button" className="suggestion" onClick={() => ask(suggestion)}>
+              {suggestion}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleSend} className="chat-input">
+        <label className="sr-only" htmlFor={`chat-input-${documentId}`}>
+          Ask a question about {filename}
+        </label>
+        <input
+          id={`chat-input-${documentId}`}
+          type="text"
+          placeholder={conversationId ? 'Ask a follow-up...' : `Ask about ${filename}`}
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          maxLength={500}
+        />
+        <button type="submit" className="send-btn" aria-label="Send question" disabled={isStreaming || !question.trim()}>
+          <IconSend />
+        </button>
+      </form>
+      <p className="chat-disclaimer">AI answers can be wrong. Check important details in the document.</p>
+    </aside>
   )
 }
 

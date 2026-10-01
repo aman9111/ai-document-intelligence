@@ -13,6 +13,33 @@
   --card: #ffffff;
   --border: #ece8f5;
   --accent: #7c6bd6;
+  /* Solid purple for main buttons: white text on it stays readable */
+  --primary: #6a58c9;
+  --primary-strong: #43349c;
+  --primary-soft: #efecfb;
+  --primary-line: #c9c0f2;
+  --ground: #f6f4fb;
+
+  /* Page categories: bar colour, chip background, chip text */
+  --insurance: #7fb0e8;
+  --insurance-bg: #dcebfb;
+  --insurance-fg: #1e4f8a;
+  --medical: #f19bb6;
+  --medical-bg: #fde2ea;
+  --medical-fg: #9b2c55;
+  --financial: #7fd3ac;
+  --financial-bg: #d9f5e8;
+  --financial-fg: #1f6b4a;
+  --kyc: #f5b47f;
+  --kyc-bg: #ffe6d2;
+  --kyc-fg: #8a4b14;
+  --other: #b9b4cc;
+  --other-bg: #efedf4;
+  --other-fg: #4a4660;
+  --failed: #e58a8a;
+  --failed-bg: #fbe0e0;
+  --failed-fg: #9b1c1c;
+  --review: #f0a35e;
   --danger-bg: #ffe8ea;
   --danger-text: #b4234a;
 
@@ -48,6 +75,12 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
+}
+
+/* The logged-in workspace uses the whole window, not a centred card */
+#root:has(> .workspace) {
+  display: block;
+  padding: 0;
 }
 
 h1,
