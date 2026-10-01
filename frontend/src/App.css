@@ -261,12 +261,20 @@
   min-height: 100svh;
   background: var(--ground);
   color: var(--text-h);
+
+  /* Wide screens: exactly the window height, so the page itself never
+     scrolls; the document list, pages and chat scroll inside */
+  @media (min-width: 1000px) {
+    height: 100svh;
+    overflow: hidden;
+  }
 }
 
 .ws-header {
   position: sticky;
   top: 0;
   z-index: 5;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -356,10 +364,6 @@
   gap: 20px;
   padding: 20px 28px 24px;
   min-height: 0;
-
-  @media (min-width: 1000px) {
-    height: calc(100svh - 69px);
-  }
 
   @media (max-width: 999px) {
     flex-direction: column;
