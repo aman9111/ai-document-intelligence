@@ -61,8 +61,10 @@ docker compose down -v            # stop and DELETE all data and uploads
 
 ## Deploy to a server
 
-See [`deploy/DEPLOY.md`](deploy/DEPLOY.md): a free Oracle Cloud server, a free DuckDNS domain
-and automatic HTTPS with Caddy, using the same Docker setup.
+Both guides use the same Docker setup, a free DuckDNS domain and automatic HTTPS with Caddy:
+
+- [`deploy/DEPLOY-AWS.md`](deploy/DEPLOY-AWS.md): AWS EC2 (`t4g.small`), paid from the free plan credits
+- [`deploy/DEPLOY-ORACLE.md`](deploy/DEPLOY-ORACLE.md): Oracle Cloud Always Free server (needs a Visa, Mastercard or Amex card)
 
 ## Run without Docker (development)
 
