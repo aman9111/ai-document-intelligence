@@ -1,0 +1,4 @@
+# Extra packages only needed to prepare training data (not by the app or the server):
+#   pip install -r requirements.txt -r training/requirements-training.txt
+pandas==2.3.3
+pyarrow==25.0.1

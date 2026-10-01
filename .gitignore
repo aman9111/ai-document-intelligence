@@ -18,3 +18,7 @@ backend/try_*.py
 
 # database backups made on the server
 backups/
+
+# generated training pages (re-create with training/generate_samples.py)
+backend/training/data/
+backend/training/public_data/
