@@ -63,13 +63,13 @@ class Document(Base):
         nullable=False
     )
 
-    # Document classification: "bill", "lab_report", ... or "others".
-    # Empty until the document has been classified.
+    # Summary of the page types: the most common type of the file's pages
+    # (each page has its own type in document_pages). Empty until classified.
     doc_type: Mapped[str | None] = mapped_column(String(30), index=True, nullable=True)
     doc_type_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Score for every type from each model, e.g. {"text": {...}, "image": {...}}
+    # Pages per category, e.g. {"medical": 2, "financial": 6}
     doc_type_scores: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # True when the user changed the type by hand (kept as training data)
+    # True when any page type was changed by hand
     doc_type_corrected: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -107,6 +107,17 @@ class DocumentPage(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     # "text" = read directly from the file, "ocr" = read from an image
     method: Mapped[str] = mapped_column(String(10), nullable=False)
+
+    # Page classification (classification/classify.py). Empty until classified.
+    doc_type: Mapped[str | None] = mapped_column(String(30), index=True, nullable=True)
+    category: Mapped[str | None] = mapped_column(String(20), index=True, nullable=True)
+    doc_type_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    doc_type_scores: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Low confidence, decided from the image only, or a continuation guess
+    needs_review: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    doc_type_reason: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # True when the user picked the type by hand (kept as training data)
+    doc_type_corrected: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
 
     document: Mapped["Document"] = relationship(back_populates="pages")
 

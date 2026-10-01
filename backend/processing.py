@@ -1,6 +1,7 @@
 import logging
 
 from chunking import chunk_page
+from classification.pages import classify_document
 from database import SessionLocal
 from embeddings import embed_passages
 from extraction import extract_pages
@@ -54,6 +55,14 @@ def process_document(document_id: int, file_path) -> None:
                         embedding=vector,
                     )
                 )
+
+            # Page types (bill, lab report, Aadhaar...). Search and chat work without
+            # them, so a classification problem must not fail the whole document.
+            if document.pages:
+                try:
+                    classify_document(document, file_path)
+                except Exception:
+                    logger.exception("Page classification failed for document %s", document_id)
 
             document.status = "ready" if chunks else "failed"
         except Exception:

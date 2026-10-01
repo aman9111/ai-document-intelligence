@@ -33,6 +33,8 @@ class Source:
     number: int
     page_number: int
     text: str
+    # Page type from the classifier, e.g. "Hospital bill" (empty if not classified)
+    label: str = ""
 
 
 @dataclass
@@ -94,7 +96,8 @@ def get_client() -> OpenAI:
 
 def build_user_message(question: str, sources: list[Source]) -> str:
     excerpts = "\n\n".join(
-        f"[{source.number}] (page {source.page_number})\n{source.text}" for source in sources
+        f"[{source.number}] (page {source.page_number}{', ' + source.label if source.label else ''})\n{source.text}"
+        for source in sources
     )
     return f"Question: {question}\n\nDocument excerpts:\n\n{excerpts}"
 

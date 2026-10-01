@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
 import DocumentChat from './DocumentChat'
+import DocumentPages from './DocumentPages'
 import DocumentSearch from './DocumentSearch'
 import DocumentText from './DocumentText'
 
@@ -12,6 +13,18 @@ interface DocumentItem {
   size_bytes: number
   status: string
   created_at: string
+  doc_type: string | null
+  // Pages per category, e.g. {"medical": 2, "financial": 6}
+  doc_type_scores: Record<string, number> | null
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  insurance: 'Insurance',
+  medical: 'Medical',
+  financial: 'Financial',
+  kyc: 'KYC',
+  other: 'Other',
+  failed: 'Failed',
 }
 
 interface DocumentsProps {
@@ -43,6 +56,7 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
   const [viewingDocument, setViewingDocument] = useState<DocumentItem | null>(null)
   const [searchingDocument, setSearchingDocument] = useState<DocumentItem | null>(null)
   const [askingDocument, setAskingDocument] = useState<DocumentItem | null>(null)
+  const [pagesDocument, setPagesDocument] = useState<DocumentItem | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const authHeader = { Authorization: `Bearer ${token}` }
@@ -176,6 +190,31 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
     }
   }
 
+  async function handleClassify(document: DocumentItem) {
+    setError(null)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/documents/${document.id}/classify`, {
+        method: 'POST',
+        headers: authHeader,
+      })
+
+      if (response.status === 401) return onUnauthorized()
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(getErrorMessage(data.detail, 'Could not classify the pages'))
+        return
+      }
+
+      // Status is now "processing", so the list refreshes itself until it's done
+      setDocuments((current) => current.map((d) => (d.id === document.id ? (data as DocumentItem) : d)))
+    } catch {
+      setError('Could not reach the server')
+    }
+  }
+
   async function handleDelete(document: DocumentItem) {
     if (!window.confirm(`Delete "${document.original_filename}"?`)) return
 
@@ -273,6 +312,9 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
                     <button type="button" className="btn-icon btn-icon-ai" onClick={() => setAskingDocument(document)}>
                       Ask AI
                     </button>
+                    <button type="button" className="btn-icon" onClick={() => setPagesDocument(document)}>
+                      Pages
+                    </button>
                     <button type="button" className="btn-icon" onClick={() => setSearchingDocument(document)}>
                       Find in text
                     </button>
@@ -293,9 +335,31 @@ function Documents({ token, onUnauthorized }: DocumentsProps) {
                   Delete
                 </button>
               </div>
+              {document.doc_type_scores && Object.keys(document.doc_type_scores).length > 0 && (
+                <p className="category-chips">
+                  {Object.entries(document.doc_type_scores).map(([category, count]) => (
+                    <span key={category} className={`category-chip category-${category}`}>
+                      {CATEGORY_LABELS[category] ?? category} {count}
+                    </span>
+                  ))}
+                </p>
+              )}
             </li>
           ))}
         </ul>
+      )}
+
+      {pagesDocument && (
+        <DocumentPages
+          documentId={pagesDocument.id}
+          filename={pagesDocument.original_filename}
+          token={token}
+          onClose={() => setPagesDocument(null)}
+          onClassify={() => {
+            handleClassify(pagesDocument)
+            setPagesDocument(null)
+          }}
+        />
       )}
 
       {askingDocument && (

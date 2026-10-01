@@ -116,11 +116,26 @@ def apply_page_context(results: list[PageResult]) -> list[PageResult]:
     return results
 
 
-def classify_pages(pages: list[tuple[str, Image.Image]]) -> list[PageResult]:
-    """pages: (OCR text, page image) for every page of one file, in order."""
+def decide_text_only(text: str) -> PageResult:
+    # Files without page images (DOCX): only the text model can decide
+    if not has_text(text):
+        return PageResult(FAILED, FAILED, 0.0, True, reason="no readable text found")
+    text_scores = predict_text(text)
+    doc_type = max(text_scores, key=text_scores.get)
+    confidence = text_scores[doc_type]
+    return PageResult(doc_type, category_of(doc_type), round(confidence, 4), confidence < REVIEW_THRESHOLD,
+                      scores={"text": {t: round(p, 4) for t, p in text_scores.items()}},
+                      reason="decided from the text only (no page image)")
+
+
+def classify_pages(pages: list[tuple[str, Image.Image | None]]) -> list[PageResult]:
+    """pages: (OCR text, page image or None) for every page of one file, in order."""
     results: list[PageResult | None] = [None] * len(pages)
     readable = []
     for i, (text, image) in enumerate(pages):
+        if image is None:
+            results[i] = decide_text_only(text)
+            continue
         # Only pages without text can be "failed": scanned text is often light grey,
         # so a page with OCR text is never judged by its pixels
         reason = None if has_text(text) else pixel_failed_reason(image)

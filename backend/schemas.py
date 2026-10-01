@@ -27,6 +27,9 @@ class DocumentOut(BaseModel):
     size_bytes: int
     status: str
     created_at: datetime
+    # Classification summary: most common page type and pages per category
+    doc_type: str | None = None
+    doc_type_scores: dict | None = None
 
 
 class DocumentPageOut(BaseModel):
@@ -100,3 +103,30 @@ class MessageOut(BaseModel):
     role: str
     content: str
     created_at: datetime
+
+
+class PageOut(BaseModel):
+    page_number: int
+    doc_type: str | None
+    doc_type_label: str
+    category: str | None
+    confidence: float | None
+    needs_review: bool
+    reason: str | None
+    corrected: bool
+    text_preview: str
+
+
+class PageTypeUpdate(BaseModel):
+    doc_type: str
+
+
+class DocTypeOption(BaseModel):
+    value: str
+    label: str
+    category: str
+
+
+class ClassificationOptions(BaseModel):
+    categories: dict[str, str]
+    types: list[DocTypeOption]

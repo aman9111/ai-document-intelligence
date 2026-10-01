@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from dependencies import get_current_user, get_db
+from classification.pages import doc_type_label
 from embeddings import embed_query
 from llm import LLMNotConfiguredError, Source, answer_question, save_usage
 from models import Document, DocumentChunk, User
@@ -237,8 +238,13 @@ def find_sources(document: Document, query: str, db: Session) -> list[Source]:
         if len(source_chunks) == ASK_SOURCE_CHUNKS:
             break
 
+    labels = {
+        page.page_number: doc_type_label(page.doc_type)
+        for page in document.pages
+        if page.doc_type and page.doc_type != "failed"
+    }
     return [
-        Source(number=number, page_number=chunk.page_number, text=chunk.text)
+        Source(number=number, page_number=chunk.page_number, text=chunk.text, label=labels.get(chunk.page_number, ""))
         for number, chunk in enumerate(source_chunks, start=1)
     ]
 
