@@ -6,3 +6,5 @@ __pycache__/
 uploads/
 sample*
 try_*.py
+# Training scripts and their data are only for making the models, not for running the app
+training/

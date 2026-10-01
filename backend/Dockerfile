@@ -17,8 +17,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download the embedding model now, so the container doesn't need to on first use
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')"
+# Download the models now, so the container doesn't need to on first use:
+# the text embedding model for search, and SigLIP 2 (vision part only) for page types
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
+    && python -c "from fastembed import ImageEmbedding; ImageEmbedding('google/siglip2-base-patch16-224')"
 
 COPY . .
 
