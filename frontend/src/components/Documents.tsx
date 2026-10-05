@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, DragEvent } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
-import { formatSize, getFileLabel, pageCount } from '../types'
+import { PROCESS_STEPS, formatSize, getFileLabel, pageCount, processStepIndex } from '../types'
 import type { DocumentItem } from '../types'
 import CategoryBar from './CategoryBar'
 import DocumentPanel from './DocumentPanel'
@@ -14,7 +14,7 @@ interface DocumentsProps {
 }
 
 const ACCEPTED_FILES = '.pdf,.docx,.png,.jpg,.jpeg'
-const POLL_INTERVAL_MS = 3000
+const POLL_INTERVAL_MS = 2000
 const TOAST_MS = 6000
 
 function FileBadge({ contentType }: { contentType: string }) {
@@ -36,14 +36,14 @@ function PagesIllustration({ large = false }: { large?: boolean }) {
   )
 }
 
-// A file on its way: uploading (step 0) or being read and sorted (step 1)
+// A file on its way: uploading, reading its text or sorting its pages
 function ReadingCard({ name, contentType, step, onSelect }: {
   name: string
   contentType: string
-  step: 0 | 1
+  step: number
   onSelect?: () => void
 }) {
-  const steps = ['Uploading', 'Reading & sorting pages', 'Ready']
+  const steps = PROCESS_STEPS
 
   return (
     <div className="reading-card">
@@ -58,7 +58,7 @@ function ReadingCard({ name, contentType, step, onSelect }: {
             <span className="reading-name">{name}</span>
           )}
           <span className="reading-step">
-            Step {step + 1} of 3 · {steps[step]}
+            Step {step + 1} of {steps.length} · {steps[step]}
           </span>
         </div>
       </div>
@@ -296,7 +296,7 @@ function Documents({ token, search, onUnauthorized }: DocumentsProps) {
                 key={d.id}
                 name={d.original_filename}
                 contentType={d.content_type}
-                step={1}
+                step={processStepIndex(d)}
                 onSelect={() => setSelectedId(d.id)}
               />
             ))}
@@ -356,6 +356,7 @@ function Documents({ token, search, onUnauthorized }: DocumentsProps) {
             onClassify={() => postAction(selected, 'classify', 'Could not classify the pages')}
             onDelete={() => handleDelete(selected)}
             onError={setError}
+            onChanged={loadDocuments}
           />
         ) : (
           <div className="welcome">

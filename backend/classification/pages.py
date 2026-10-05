@@ -6,9 +6,11 @@ from pathlib import Path
 
 from pdf2image import convert_from_path
 from PIL import Image
+from sqlalchemy.orm import object_session
 
 from classification.classify import classify_pages
 from classification.labels import DOC_TYPES, FAILED
+from classification.memory import apply_corrections
 from models import Document
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,11 @@ def classify_document(document: Document, file_path: Path) -> None:
         page.doc_type_scores = result.scores
         page.needs_review = result.needs_review
         page.doc_type_reason = result.reason or None
+
+    # Pages like ones the user corrected before get the user's type
+    db = object_session(document)
+    if db is not None:
+        apply_corrections(db, document)
     summarize(document)
 
 

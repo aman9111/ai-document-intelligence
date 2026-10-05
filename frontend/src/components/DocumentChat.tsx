@@ -27,8 +27,8 @@ interface SourceRef {
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
-  // Only set on messages from this session, not on ones loaded from history
-  sources?: SourceRef[]
+  // Assistant answers: page of each excerpt number (empty for chats from before this was saved)
+  sources?: SourceRef[] | null
   tokensUsed?: number | null
   isStreaming?: boolean
   error?: string
@@ -52,6 +52,14 @@ function formatNumber(value: number | null): string {
 
 function citedNumbers(answer: string): number[] {
   return [...new Set([...answer.matchAll(CITATION)].map((match) => Number(match[1])))]
+}
+
+// Pages an answer cited, using its saved sources
+function citedPages(answer: string, sources: SourceRef[]): number[] {
+  const pages = citedNumbers(answer)
+    .map((n) => sources.find((s) => s.number === n)?.page_number)
+    .filter((page): page is number => page !== undefined)
+  return [...new Set(pages)]
 }
 
 // The LLM writes citations as [1] or 【1】 and bold text as **text**.
@@ -175,7 +183,11 @@ function DocumentChat({ documentId, filename, token, suggestions, onAnswer, onFo
         headers: authHeader,
       })
       if (!response.ok) throw new Error()
-      setMessages(await response.json())
+      const loaded: ChatMessage[] = await response.json()
+      setMessages(loaded)
+      // Highlight the pages the last answer of this chat used
+      const lastAnswer = [...loaded].reverse().find((m) => m.role === 'assistant')
+      if (lastAnswer?.sources) onAnswer(citedPages(lastAnswer.content, lastAnswer.sources))
     } catch {
       setError('Could not load this chat')
     }
@@ -252,10 +264,7 @@ function DocumentChat({ documentId, filename, token, suggestions, onAnswer, onFo
             tokensUsed: doneUsage?.tokens_used ?? null,
           }))
 
-          const pages = citedNumbers(answer)
-            .map((n) => sources.find((s) => s.number === n)?.page_number)
-            .filter((page): page is number => page !== undefined)
-          onAnswer([...new Set(pages)])
+          onAnswer(citedPages(answer, sources))
         }
       })
 

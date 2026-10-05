@@ -62,6 +62,9 @@ class Document(Base):
         default=datetime.utcnow,
         nullable=False
     )
+    # While status is "processing": "reading" (OCR + search index) or "sorting"
+    # (page classification), so the UI can show which step is running
+    processing_step: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     # Summary of the page types: the most common type of the file's pages
     # (each page has its own type in document_pages). Empty until classified.
@@ -184,6 +187,9 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String(10), nullable=False)  # "user" or "assistant"
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Assistant answers: which page each excerpt number came from,
+    # [{"number": 1, "page_number": 7, "label": "Hospital bill"}, ...]
+    sources: Mapped[list | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,

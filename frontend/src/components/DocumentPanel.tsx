@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { API_BASE_URL, getErrorMessage } from '../api'
-import { CATEGORY_LABELS, FAILED, SUGGESTED_QUESTIONS, formatSize, pageCount } from '../types'
+import { CATEGORY_LABELS, FAILED, PROCESS_STEPS, SUGGESTED_QUESTIONS, formatSize, pageCount, processStepIndex } from '../types'
 import type { ClassificationOptions, DocumentItem, PageItem } from '../types'
 import CategoryBar from './CategoryBar'
 import DocumentChat from './DocumentChat'
@@ -17,11 +17,13 @@ interface DocumentPanelProps {
   onClassify: () => void
   onDelete: () => void
   onError: (message: string) => void
+  // A page type changed, so the document's category summary may have changed too
+  onChanged: () => void
 }
 
 const REVIEW_TAB = 'review'
 
-function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify, onDelete, onError }: DocumentPanelProps) {
+function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify, onDelete, onError, onChanged }: DocumentPanelProps) {
   const [pages, setPages] = useState<PageItem[] | null>(null)
   const [options, setOptions] = useState<ClassificationOptions | null>(null)
   const [pagesError, setPagesError] = useState<string | null>(null)
@@ -30,6 +32,8 @@ function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify,
   const [citedPages, setCitedPages] = useState<number[]>([])
   const [focus, setFocus] = useState<{ page: number; at: number } | null>(null)
   const [saving, setSaving] = useState<number | null>(null)
+  // "Also updated 2 similar pages" after a correction
+  const [notice, setNotice] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [dialog, setDialog] = useState<'search' | 'text' | null>(null)
   // On narrow screens pages and chat don't fit side by side: show one at a time
@@ -54,6 +58,12 @@ function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify,
       .then((data: ClassificationOptions) => setOptions(data))
       .catch(() => setPagesError('Could not load the document types'))
   }, [document.id, isReady, authHeader, onUnauthorized])
+
+  useEffect(() => {
+    if (!notice) return
+    const timeoutId = setTimeout(() => setNotice(null), 6000)
+    return () => clearTimeout(timeoutId)
+  }, [notice])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -120,7 +130,21 @@ function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify,
         return
       }
 
-      setPages((current) => current?.map((p) => (p.page_number === page.page_number ? (data as PageItem) : p)) ?? null)
+      // The server also gives similar pages of this file the same type, so reload
+      // all pages and tell the user how many others changed
+      const before = new Map((pages ?? []).map((p) => [p.page_number, p.doc_type]))
+      const reload = await fetch(`${API_BASE_URL}/documents/${document.id}/pages`, { headers: authHeader })
+      if (reload.ok) {
+        const fresh: PageItem[] = await reload.json()
+        const others = fresh.filter(
+          (p) => p.page_number !== page.page_number && before.get(p.page_number) !== p.doc_type,
+        ).length
+        setPages(fresh)
+        setNotice(others > 0 ? `Also moved ${others} similar page${others === 1 ? '' : 's'} to ${data.doc_type_label}` : null)
+      } else {
+        setPages((current) => current?.map((p) => (p.page_number === page.page_number ? (data as PageItem) : p)) ?? null)
+      }
+      onChanged()
     } catch {
       onError('Could not reach the server')
     } finally {
@@ -216,8 +240,19 @@ function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify,
       {document.status === 'processing' && (
         <div className="panel-state">
           <span className="spinner" aria-hidden="true" />
-          <h2>Reading and sorting pages…</h2>
-          <p>This usually takes under a minute. You can open other documents meanwhile.</p>
+          <h2>{document.processing_step === 'sorting' ? 'Sorting pages…' : 'Reading the text…'}</h2>
+          <div className="steps panel-steps" aria-hidden="true">
+            {PROCESS_STEPS.map((label, index) => (
+              <span
+                key={label}
+                className={`step${index < processStepIndex(document) ? ' step-done' : ''}${index === processStepIndex(document) ? ' step-active' : ''}`}
+              />
+            ))}
+          </div>
+          <p>
+            Step {processStepIndex(document) + 1} of {PROCESS_STEPS.length}. This usually takes under a minute. You can
+            open other documents meanwhile.
+          </p>
         </div>
       )}
 
@@ -285,6 +320,11 @@ function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify,
           <div className={`panel-split show-${mobileView}`}>
             <div className="panel-pages">
               {pagesError && <p className="login-error">{pagesError}</p>}
+              {notice && (
+                <p className="pages-notice" role="status">
+                  <IconSparkle size={16} /> {notice}
+                </p>
+              )}
               {!pages && !pagesError && <p className="side-note">Loading pages...</p>}
 
               {pages && unclassified > 0 && (

@@ -269,6 +269,8 @@ function DocumentPages({
                       <p className="page-note page-note-ok">Set by you</p>
                     ) : page.needs_review && !isFailed ? (
                       <p className="page-note page-note-warn">Not sure, please check the type</p>
+                    ) : page.reason?.endsWith('which you corrected') ? (
+                      <p className="page-note page-note-memory">Learnt from you: {page.reason}</p>
                     ) : page.reason ? (
                       <p className="page-note">{page.reason}</p>
                     ) : null}

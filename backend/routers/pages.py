@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from classification.labels import CATEGORIES, DOC_TYPES, category_of
+from classification.memory import apply_corrections
 from classification.pages import classify_document, doc_type_label, page_image, summarize
 from database import SessionLocal
 from dependencies import get_current_user, get_db
@@ -98,6 +99,9 @@ def update_page_type(
     page.needs_review = False
     page.doc_type_reason = "changed by user"
     page.doc_type_corrected = True
+    db.flush()
+    # Learn from it right away: similar pages of this file get the same type
+    apply_corrections(db, document)
     summarize(document)
     db.commit()
     return to_page_out(page)
@@ -112,6 +116,7 @@ def classify_in_background(document_id: int) -> None:
             classify_document(document, UPLOAD_DIR / document.stored_filename)
         finally:
             document.status = "ready"
+            document.processing_step = None
             db.commit()
 
 
@@ -132,6 +137,7 @@ def classify_pages_again(
         raise HTTPException(status_code=409, detail="Document has no pages yet")
 
     document.status = "processing"
+    document.processing_step = "sorting"
     db.commit()
     db.refresh(document)
     background_tasks.add_task(classify_in_background, document.id)

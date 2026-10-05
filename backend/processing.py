@@ -22,6 +22,7 @@ def process_document(document_id: int, file_path) -> None:
             return
 
         document.status = "processing"
+        document.processing_step = "reading"
         document.pages.clear()
         document.chunks.clear()
         db.commit()
@@ -57,6 +58,10 @@ def process_document(document_id: int, file_path) -> None:
                     )
                 )
 
+            # Text and search index are saved; tell the UI that sorting has started
+            document.processing_step = "sorting"
+            db.commit()
+
             # Page types (bill, lab report, Aadhaar...). Search and chat work without
             # them, so a classification problem must not fail the whole document.
             if document.pages:
@@ -74,6 +79,7 @@ def process_document(document_id: int, file_path) -> None:
                 return
             document.status = "failed"
 
+        document.processing_step = None
         db.commit()
     finally:
         db.close()

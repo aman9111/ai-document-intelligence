@@ -30,6 +30,7 @@ class DocumentOut(BaseModel):
     # Classification summary: most common page type and pages per category
     doc_type: str | None = None
     doc_type_scores: dict | None = None
+    processing_step: str | None = None
 
 
 class DocumentPageOut(BaseModel):
@@ -102,6 +103,7 @@ class MessageOut(BaseModel):
     id: int
     role: str
     content: str
+    sources: list[dict] | None = None
     created_at: datetime
 
 

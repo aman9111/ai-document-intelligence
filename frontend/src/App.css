@@ -555,7 +555,7 @@
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -1309,6 +1309,29 @@
 .page-note-warn {
   color: var(--kyc-fg);
   font-weight: 600;
+}
+
+.page-note-memory {
+  color: var(--primary-strong);
+  font-weight: 600;
+}
+
+.pages-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+  font-size: 13px;
+  font-weight: 600;
+  animation: rise 0.2s ease-out;
+}
+
+.panel-steps {
+  width: min(320px, 100%);
 }
 
 .page-note-ok {

@@ -107,19 +107,12 @@ def chat(
     db.commit()
 
     conversation_id = conversation.id
+    source_refs = [{"number": s.number, "page_number": s.page_number, "label": s.label} for s in sources]
 
     def event_stream():
         # Which page each excerpt number is from, so the UI can turn a citation
         # like [2] into "Page 7 · Hospital bill" and highlight that page
-        yield sse(
-            "start",
-            {
-                "conversation_id": conversation_id,
-                "sources": [
-                    {"number": s.number, "page_number": s.page_number, "label": s.label} for s in sources
-                ],
-            },
-        )
+        yield sse("start", {"conversation_id": conversation_id, "sources": source_refs})
 
         parts = []
         usage = None
@@ -145,7 +138,12 @@ def chat(
         # so saving the answer needs its own session
         with SessionLocal() as stream_db:
             stream_db.add(
-                Message(conversation_id=conversation_id, role="assistant", content="".join(parts).strip())
+                Message(
+                    conversation_id=conversation_id,
+                    role="assistant",
+                    content="".join(parts).strip(),
+                    sources=source_refs,
+                )
             )
             stream_db.commit()
 
