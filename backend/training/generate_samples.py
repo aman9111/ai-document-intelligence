@@ -140,6 +140,82 @@ def phone(rng):
 # ---------------------------------------------------------------- page content
 # A page is a list of blocks; the renderer decides how each block looks.
 
+ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve",
+        "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+
+
+def in_words(n):
+    """Rupees in words, Indian style: 1890 -> "One Thousand Eight Hundred And Ninety"."""
+    def below_hundred(x):
+        return ONES[x] if x < 20 else (TENS[x // 10] + (" " + ONES[x % 10] if x % 10 else ""))
+
+    parts = []
+    for size, word in [(100000, "Lakh"), (1000, "Thousand"), (100, "Hundred")]:
+        if n >= size:
+            parts.append(f"{below_hundred(n // size)} {word}")
+            n %= size
+    if n:
+        parts.append(("And " if parts else "") + below_hundred(n))
+    return " ".join(parts) or "Zero"
+
+
+def contact_line(rng, org="demo"):
+    # Real bills and receipts often end with a website, email and phone number.
+    # Without these, the model learnt that "contact details" mean a letter or resume.
+    slug = "".join(c for c in org.lower() if c.isalnum())[:14] or "demo"
+    return rng.choice([
+        f"Visit our website www.{slug}-demo.in  |  Email: care@{slug}-demo.in",
+        f"Helpline: {phone(rng)}  |  www.{slug}-demo.in",
+        f"For home sample collection call {phone(rng)}  |  Email: help@{slug}-demo.in",
+        f"Customer care {phone(rng)}  |  Reports online at www.{slug}-demo.in",
+    ])
+
+
+LAB_RECEIPT_TESTS = ["Haemogram (CBC)", "SGPT (ALT)", "SGOT (AST)", "Bilirubin total", "Bilirubin direct",
+                     "Lipid profile", "Thyroid profile (T3 T4 TSH)", "HbA1c", "Vitamin B12", "Vitamin D (25-OH)",
+                     "Serum creatinine", "Blood urea", "Urine routine and microscopy", "Fasting blood sugar",
+                     "Post prandial blood sugar", "ESR", "CRP", "Dengue NS1 antigen", "Widal test", "Serum calcium",
+                     "Liver function test", "Kidney function test", "Iron studies", "Malaria antigen"]
+PAY_MODES = ["Paytm POS", "UPI", "PhonePe", "GPay", "Card POS", "Cash", "Credit card", "Debit card", "NEFT"]
+
+
+def lab_receipt(rng):
+    """Diagnostic lab bill-cum-receipt: tests with report time and price, totals,
+    a payment history table and the amount in words."""
+    org = f"{rng.choice(HOSPITAL_A)} {rng.choice(['Demo Diagnostics', 'Sample Pathology Lab', 'Test Clinical Laboratories', 'Mock Path Labs'])}"
+    tests = rng.sample(LAB_RECEIPT_TESTS, rng.randint(2, 7))
+    prices = [rng.choice([90, 120, 150, 190, 230, 280, 350, 450, 600, 850, 1200]) for _ in tests]
+    gross = sum(prices)
+    discount = rng.choice([0, 0, 0, round(gross * 0.1)])
+    net = gross - discount
+    when = date(rng)
+    if rng.random() < 0.6:
+        rows = [(t, f"{when} {rng.choice(['02:30 PM', '04:30 PM', '06:00 PM', '11:00 AM'])}",
+                 rng.choice(["", "", "TAT is for working days", "Fasting sample"]), f"{p:.2f}") for t, p in zip(tests, prices)]
+        header = ["Test Name", "Expected Report Time", "Remarks", "Amount"]
+    else:
+        rows = [(str(i + 1), t, f"{p:.2f}") for i, (t, p) in enumerate(zip(tests, prices))]
+        header = ["Sr.", "Investigation", "Amount (Rs)"]
+    blocks = [
+        title(rng.choice(["RECEIPT", "BILL CUM RECEIPT", "PATIENT RECEIPT", "INVOICE", "CASH RECEIPT", "BILL"])),
+        kv([("Name", name(rng)), ("Invoice No / Date", f"{digits(rng, 11)} / {when}"),
+            ("Age / Gender", f"{rng.randint(1, 85)} Yrs / {rng.choice(['Male', 'Female'])}"),
+            ("Branch", f"{rng.choice(CITIES)} Lab"), ("Doctor", doctor(rng)), ("Contact No", phone(rng))]),
+        table(header, rows),
+        kv([("Gross Bill Amount", f"{gross:.2f}"), ("Discount", f"{discount:.2f}"), ("Net Amount", f"{net:.2f}"),
+            ("Paid Amount", f"{net:.2f}"), ("Balance to Pay", "0.00")]),
+    ]
+    if rng.random() < 0.7:
+        blocks.append(heading("Payment History"))
+        blocks.append(table(["Receipt No", "Receipt Date", "Amount", "Mode", "Received By"],
+                            [(digits(rng, 8), when, f"{net:.2f}", rng.choice(PAY_MODES), name(rng).split()[0])]))
+    blocks.append(para(f"Amount Paid in Words : {in_words(net)} Only"))
+    if rng.random() < 0.8:
+        blocks.append(footer(contact_line(rng, org)))
+    return org, blocks
+
+
 def title(text): return ("title", text)
 def heading(text): return ("heading", text)
 def kv(pairs): return ("kv", pairs)
@@ -298,6 +374,8 @@ ITEMIZED_HEADER = ["Date", "SN", "Description", "Qty", "Rate", "Gross", "Disc.",
 def hospital_bill(rng):
     org = hospital(rng)
     kind = rng.choice(["summary", "itemized", "itemized", "continuation", "tests"])
+    if rng.random() < 0.2:
+        return lab_receipt(rng)
     patient = kv([("Bill no.", f"{letters(rng, 2)}{digits(rng, 6)}"), ("Patient", name(rng)), ("Admission date", date(rng)),
                   ("Discharge date", date(rng))])
     total_labels = rng.choice([("Gross amount", "Discount", "Net payable"), ("Total bill amount", "Discount", "Net amount"),
@@ -353,11 +431,23 @@ def pharmacy_bill(rng):
         kv([("Bill no.", f"{digits(rng, 5)}"), ("Date", date(rng)), ("Patient", name(rng)), ("Doctor", doctor(rng))]),
         table(header, rows),
         kv([("Net payable", f"Rs {amount(rng, 100, 6000)}"), ("Paid by", rng.choice(["Cash", "UPI", "Card"]))]),
-    ]
+    ] + ([footer(contact_line(rng, org))] if rng.random() < 0.4 else [])
 
 
 def payment_receipt(rng):
     org = hospital(rng)
+    if rng.random() < 0.35:
+        paid = rng.randint(3, 400) * 10
+        return org, [
+            title(rng.choice(["PAYMENT RECEIPT", "RECEIPT", "E-RECEIPT", "PAYMENT ACKNOWLEDGEMENT"])),
+            kv([("Receipt No", digits(rng, 9)), ("Receipt Date", date(rng)), ("Patient Name", name(rng)),
+                ("Invoice No", digits(rng, 11)), ("Contact No", phone(rng))]),
+            table(["Receipt No", "Receipt Date", "Amount", "Mode", "Received By"],
+                  [(digits(rng, 8), date(rng), f"{paid:.2f}", rng.choice(PAY_MODES), name(rng).split()[0])]),
+            kv([("Paid Amount", f"{paid:.2f}"), ("Balance to Pay", "0.00")]),
+            para(f"Amount Paid in Words : {in_words(paid)} Only"),
+            footer(contact_line(rng, org)),
+        ]
     return org, [
         title(rng.choice(["PAYMENT RECEIPT", "RECEIPT", "ADVANCE RECEIPT", "MONEY RECEIPT"])),
         kv([("Receipt no.", f"R-{digits(rng, 6)}"), ("Date", date(rng)), ("Received from", name(rng)),
