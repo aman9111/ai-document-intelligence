@@ -87,8 +87,7 @@ cd backend
 pip install -r training/requirements-training.txt
 python training/generate_samples.py      # fictional pages for all 19 types, train + test
 python training/prepare_public_data.py   # adds RVL-CDIP and MTSamples pages (see the file for downloads)
-rm -f training/data/texts.jsonl training/data/image_embeddings.npz   # after regenerating pages
-python training/build_dataset.py         # OCR every page, like the app does
+python training/build_dataset.py         # OCR every new or changed page, like the app does
 python training/train_text.py            # text model    -> classification/model_files/
 python training/train_image.py           # image model   -> classification/model_files/
 python training/evaluate.py              # whole pipeline, failed pages and multi-page bundles

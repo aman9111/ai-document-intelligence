@@ -1,13 +1,13 @@
 {
   "review_threshold": 0.6,
-  "text": 0.9813333333333333,
-  "image": 0.992,
-  "combined": 0.9946666666666667,
+  "text": 0.984,
+  "image": 0.9573333333333334,
+  "combined": 0.9893333333333333,
   "combined_not_flagged": 1.0,
   "flagged_for_review": 0.021333333333333333,
-  "failed_caught": 0.9,
-  "good_marked_failed": 0.0012970168612191958,
+  "failed_caught": 0.7666666666666667,
+  "good_marked_failed": 0.0025940337224383916,
   "bundle_accuracy": 0.9722222222222222,
   "context_fixed": 0,
-  "context_broke": 0
+  "context_broke": 1
 }

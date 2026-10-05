@@ -10,6 +10,7 @@ Saves classification/model_files/image_head.joblib and image_model_metrics.json.
 """
 
 import csv
+import hashlib
 import json
 import resource
 import sys
@@ -37,12 +38,17 @@ def peak_ram_mb():
 
 
 def embed_all(paths):
-    cached = {}
+    """{path: embedding}. Embeddings are cached by a hash of the image file, so only
+    new or changed pages go through SigLIP (the slow part of training)."""
+    hashes = {p: hashlib.sha1((DATA_DIR / p).read_bytes()).hexdigest() for p in paths}
+    by_hash = {}
     if CACHE_FILE.exists():
         data = np.load(CACHE_FILE, allow_pickle=True)
-        cached = dict(zip(data["paths"], data["vectors"]))
+        if "hashes" in data:  # caches from before hashing are not trusted
+            by_hash = dict(zip(data["hashes"], data["vectors"]))
+    cached = {p: by_hash[h] for p, h in hashes.items() if h in by_hash}
     todo = [p for p in paths if p not in cached]
-    print(f"{len(cached)} pages already embedded, {len(todo)} to go")
+    print(f"{len(cached)} pages unchanged since the last run, {len(todo)} to embed")
 
     if todo:
         started = time.time()
@@ -58,7 +64,9 @@ def embed_all(paths):
                     print(f"  {i + len(batch)}/{len(todo)}", flush=True)
             per_page = (time.time() - started) / len(todo) * 1000
             print(f"embedded at {per_page:.0f} ms per page, peak RAM {peak_ram_mb()} MB")
-        np.savez(CACHE_FILE, paths=np.array(list(cached)), vectors=np.array(list(cached.values())))
+    # Written fresh with exactly these pages, so nothing stale is left
+    np.savez(CACHE_FILE, paths=np.array(paths), hashes=np.array([hashes[p] for p in paths]),
+             vectors=np.array([cached[p] for p in paths]))
     return cached
 
 
