@@ -189,11 +189,16 @@ function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify,
         </div>
         <div className="panel-actions">
           {isReady && (
-            <button type="button" className="btn-outline" onClick={() => setDialog('search')}>
-              <IconSearch size={16} /> <span className="hide-sm">Find in text</span>
-            </button>
+            <>
+              <button type="button" className="btn-outline" aria-label="Find in text" onClick={() => setDialog('search')}>
+                <IconSearch size={16} /> <span className="hide-sm">Find in text</span>
+              </button>
+              <button type="button" className="btn-outline" aria-label="View text" onClick={() => setDialog('text')}>
+                <IconText size={16} /> <span className="hide-sm">View text</span>
+              </button>
+            </>
           )}
-          <button type="button" className="btn-outline" onClick={handleOpen}>
+          <button type="button" className="btn-outline" aria-label="Open original file" onClick={handleOpen}>
             <IconOpen size={16} /> <span className="hide-sm">Open</span>
           </button>
           <div className="menu-wrap">
@@ -211,11 +216,6 @@ function DocumentPanel({ document, token, onUnauthorized, onProcess, onClassify,
               <>
                 <button type="button" className="menu-scrim" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
                 <div className="menu" role="menu">
-                  {isReady && (
-                    <button type="button" role="menuitem" onClick={() => menuAction(() => setDialog('text'))}>
-                      <IconText size={16} /> View text
-                    </button>
-                  )}
                   {isReady && (
                     <button type="button" role="menuitem" onClick={() => menuAction(onClassify)}>
                       <IconRefresh size={16} /> Sort pages again
